@@ -1,10 +1,13 @@
 """Generating CloudFormation template."""
+""" Stack name must be of format staging-appname-service"""
 
 from troposphere.ecs import (
     TaskDefinition,
     ContainerDefinition
 )
+
 from troposphere import ecs
+
 from awacs.aws import (
     Allow,
     Statement,
@@ -27,7 +30,10 @@ from awacs.sts import AssumeRole
 
 t = Template()
 
-t.add_description("Effective DevOps in AWS: ECS service - Helloworld")
+t.add_description("ECS service")
+
+
+
 
 t.add_parameter(Parameter(
     "Tag",
@@ -35,6 +41,10 @@ t.add_parameter(Parameter(
     Default="latest",
     Description="Tag to deploy"
 ))
+
+
+
+# First, we define an ECS task
 
 t.add_resource(TaskDefinition(
     "task",
@@ -46,17 +56,22 @@ t.add_resource(TaskDefinition(
                 Ref("AWS::Region"),
                 ".amazonaws.com",
                 "/",
-                ImportValue("helloworld-repo"),
+                Select(1, Split("-", Ref("AWS::StackName"))),
                 ":",
                 Ref("Tag")]),
             Memory=32,
             Cpu=256,
-            Name="helloworld",
+            Name=Select(1, Split("-", Ref("AWS::StackName"))),
             PortMappings=[ecs.PortMapping(
                 ContainerPort=3000)]
         )
     ],
 ))
+
+
+
+
+# Then a service
 
 t.add_resource(Role(
     "ServiceRole",
@@ -86,7 +101,7 @@ t.add_resource(ecs.Service(
     DesiredCount=1,
     TaskDefinition=Ref("task"),
     LoadBalancers=[ecs.LoadBalancer(
-        ContainerName="helloworld",
+        ContainerName=Select(1, Split("-", Ref("AWS::StackName"))),
         ContainerPort=3000,
         TargetGroupArn=ImportValue(
             Join(

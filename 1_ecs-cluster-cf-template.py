@@ -13,7 +13,8 @@ from troposphere import (
     Ref,
     Sub,
     Template,
-    ec2
+    ec2,
+    FindInMap
 )
 
 from troposphere.autoscaling import (
@@ -40,14 +41,12 @@ PublicCidrIp = str(ip_network(get_ip()))
 # Instantiate the object
 t = Template()
 
-t.add_description("Effective DevOps in AWS: ECS Cluster")
+t.add_description("ECS Cluster Template")
 
-# t.add_parameter(Parameter(
-#     "KeyPair",
-#     Description="Name of an existing EC2 KeyPair to SSH",
-#     Type="AWS::EC2::KeyPair::KeyName",
-#     ConstraintDescription="must be the name of an existing EC2 KeyPair.",
-# ))
+
+##############
+# Parameters #
+##############
 
 t.add_parameter(Parameter(
     "VpcId",
@@ -62,6 +61,24 @@ t.add_parameter(Parameter(
     ConstraintDescription="PublicSubnet"
 ))
 
+
+############
+# Mappings #
+############
+
+# AMI Maps for EC2 ContainerInstances
+t.add_mapping('RegionMap', {
+    "us-east-1":      {"AMI": "ami-aff65ad2"},
+    "us-west-1":      {"AMI": "ami-69677709"},
+    "us-west-2":      {"AMI": "ami-40ddb938"}
+})
+
+
+#############
+# Resources #
+#############
+
+# Security group to access the cluster. Includes PCAR proxy stuff.
 t.add_resource(ec2.SecurityGroup(
     "SecurityGroup",
     GroupDescription="Allow SSH and private network access",
@@ -78,14 +95,41 @@ t.add_resource(ec2.SecurityGroup(
             ToPort="22",
             CidrIp=PublicCidrIp,
         ),
+        # Zscaler ranges
+        ec2.SecurityGroupRule(
+            IpProtocol="tcp",
+            FromPort="22",
+            ToPort="22",
+            CidrIp="165.225.50.0/23",
+        ),
+        ec2.SecurityGroupRule(
+            IpProtocol="tcp",
+            FromPort="22",
+            ToPort="22",
+            CidrIp="104.129.192.0/23",
+        ),
+        ec2.SecurityGroupRule(
+            IpProtocol="tcp",
+            FromPort="80",
+            ToPort="80",
+            CidrIp="165.225.50.0/23",
+        ),
+        ec2.SecurityGroupRule(
+            IpProtocol="tcp",
+            FromPort="80",
+            ToPort="80",
+            CidrIp="104.129.192.0/23",
+        ),
     ],
     VpcId=Ref("VpcId")
 ))
 
+# The ECS cluster
 t.add_resource(Cluster(
     'ECSCluster',
 ))
 
+# ECS Role
 t.add_resource(Role(
     'EcsClusterRole',
     ManagedPolicyArns=[
@@ -104,11 +148,13 @@ t.add_resource(Role(
     }
 ))
 
+# ECS Instance Profile
 t.add_resource(InstanceProfile(
     'EC2InstanceProfile',
     Roles=[Ref('EcsClusterRole')],
 ))
 
+# ECS Launch Configuration to onboard new EC2 instances
 t.add_resource(LaunchConfiguration(
     'ContainerInstances',
     UserData=Base64(Join('', [
@@ -124,8 +170,7 @@ t.add_resource(LaunchConfiguration(
         "         --region ",
         Ref('AWS::Region'),
         "\n"])),
-    ImageId='ami-40ddb938',
-    #KeyName=Ref("KeyPair"),
+    ImageId=FindInMap("RegionMap", Ref("AWS::Region"), "AMI"),
     SecurityGroups=[Ref("SecurityGroup")],
     IamInstanceProfile=Ref('EC2InstanceProfile'),
     InstanceType='t2.micro',
@@ -185,6 +230,11 @@ for reservation in {"CPU", "Memory"}:
             AutoScalingGroupName=Ref("ECSAutoScalingGroup"),
             AdjustmentType="ChangeInCapacity",
         ))
+
+
+###########
+# Outputs #
+###########
 
 t.add_output(Output(
     "Cluster",
