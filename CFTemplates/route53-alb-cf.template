@@ -1,0 +1,440 @@
+{
+    "Description": "Multi-path ALB for the ECS Cluster",
+    "Mappings": {
+        "RegionZIDMap": {
+            "us-east-1": {
+                "ZoneID": "Z35SXDOTRQ7X7K"
+            },
+            "us-west-1": {
+                "ZoneID": "Z368ELLRRE2KJ0"
+            },
+            "us-west-2": {
+                "ZoneID": "Z1H1FL5HABSF5"
+            }
+        }
+    },
+    "Outputs": {
+        "LBDNS": {
+            "Description": "Load Balancer DNS",
+            "Value": {
+                "Fn::GetAtt": [
+                    "LoadBalancer",
+                    "DNSName"
+                ]
+            }
+        },
+        "LBZoneID": {
+            "Description": "Load Balancer Zone ID",
+            "Value": {
+                "Fn::FindInMap": [
+                    "RegionZIDMap",
+                    {
+                        "Ref": "AWS::Region"
+                    },
+                    "ZoneID"
+                ]
+            }
+        },
+        "goodbyeworldURL": {
+            "Description": "Loadbalancer URL for goodbyeworld",
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        "goodbyeworld",
+                        ".",
+                        "staging.",
+                        {
+                            "Ref": "DomainName"
+                        }
+                    ]
+                ]
+            }
+        },
+        "helloworldURL": {
+            "Description": "Loadbalancer URL for helloworld",
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        "helloworld",
+                        ".",
+                        "staging.",
+                        {
+                            "Ref": "DomainName"
+                        }
+                    ]
+                ]
+            }
+        },
+        "staginggoodbyeworldTargetGroup": {
+            "Description": "Target group for staging goodbyeworld",
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "staging-goodbyeworld-tg"
+                }
+            },
+            "Value": {
+                "Ref": "staginggoodbyeworldTargetGroup"
+            }
+        },
+        "staginghelloworldTargetGroup": {
+            "Description": "Target group for staging helloworld",
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "staging-helloworld-tg"
+                }
+            },
+            "Value": {
+                "Ref": "staginghelloworldTargetGroup"
+            }
+        }
+    },
+    "Parameters": {
+        "DomainName": {
+            "Default": "data-muffin.com",
+            "Description": "Domain name registered in Route53",
+            "Type": "String"
+        }
+    },
+    "Resources": {
+        "Listener": {
+            "Properties": {
+                "DefaultActions": [
+                    {
+                        "TargetGroupArn": {
+                            "Ref": "staginghelloworldTargetGroup"
+                        },
+                        "Type": "forward"
+                    }
+                ],
+                "LoadBalancerArn": {
+                    "Ref": "LoadBalancer"
+                },
+                "Port": "80",
+                "Protocol": "HTTP"
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::Listener"
+        },
+        "LoadBalancer": {
+            "Properties": {
+                "Scheme": "internet-facing",
+                "SecurityGroups": [
+                    {
+                        "Ref": "LoadBalancerSecurityGroup"
+                    }
+                ],
+                "Subnets": {
+                    "Fn::Split": [
+                        ",",
+                        {
+                            "Fn::ImportValue": {
+                                "Fn::Join": [
+                                    "-",
+                                    [
+                                        {
+                                            "Fn::Select": [
+                                                0,
+                                                {
+                                                    "Fn::Split": [
+                                                        "-",
+                                                        {
+                                                            "Ref": "AWS::StackName"
+                                                        }
+                                                    ]
+                                                }
+                                            ]
+                                        },
+                                        "cluster-public-subnets"
+                                    ]
+                                ]
+                            }
+                        }
+                    ]
+                }
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer"
+        },
+        "LoadBalancerSecurityGroup": {
+            "Properties": {
+                "GroupDescription": "Web load balancer security group.",
+                "SecurityGroupIngress": [
+                    {
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": "80",
+                        "IpProtocol": "tcp",
+                        "ToPort": "80"
+                    }
+                ],
+                "VpcId": {
+                    "Fn::ImportValue": {
+                        "Fn::Join": [
+                            "-",
+                            [
+                                {
+                                    "Fn::Select": [
+                                        0,
+                                        {
+                                            "Fn::Split": [
+                                                "-",
+                                                {
+                                                    "Ref": "AWS::StackName"
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                "cluster-vpc-id"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Type": "AWS::EC2::SecurityGroup"
+        },
+        "goodbyeworldDNSRecord": {
+            "Properties": {
+                "AliasTarget": {
+                    "Ref": "AliasTargetString"
+                },
+                "Comment": "DNS name for my instance.",
+                "HostedZoneName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            {
+                                "Ref": "DomainName"
+                            },
+                            "."
+                        ]
+                    ]
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            "goodbyeworld",
+                            ".",
+                            "staging.",
+                            {
+                                "Ref": "DomainName"
+                            },
+                            "."
+                        ]
+                    ]
+                },
+                "Type": "A"
+            },
+            "Type": "AWS::Route53::RecordSet"
+        },
+        "goodbyeworldListenerRule": {
+            "Properties": {
+                "Actions": [
+                    {
+                        "TargetGroupArn": {
+                            "Ref": "staginggoodbyeworldTargetGroup"
+                        },
+                        "Type": "forward"
+                    }
+                ],
+                "Conditions": [
+                    {
+                        "Field": "host-header",
+                        "Values": [
+                            {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "goodbyeworld",
+                                        ".",
+                                        "staging.",
+                                        {
+                                            "Ref": "DomainName"
+                                        }
+                                    ]
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "ListenerArn": {
+                    "Ref": "Listener"
+                },
+                "Priority": 2
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::ListenerRule"
+        },
+        "helloworldDNSRecord": {
+            "Properties": {
+                "AliasTarget": {
+                    "Ref": "AliasTargetString"
+                },
+                "Comment": "DNS name for my instance.",
+                "HostedZoneName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            {
+                                "Ref": "DomainName"
+                            },
+                            "."
+                        ]
+                    ]
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            "helloworld",
+                            ".",
+                            "staging.",
+                            {
+                                "Ref": "DomainName"
+                            },
+                            "."
+                        ]
+                    ]
+                },
+                "Type": "A"
+            },
+            "Type": "AWS::Route53::RecordSet"
+        },
+        "helloworldListenerRule": {
+            "Properties": {
+                "Actions": [
+                    {
+                        "TargetGroupArn": {
+                            "Ref": "staginghelloworldTargetGroup"
+                        },
+                        "Type": "forward"
+                    }
+                ],
+                "Conditions": [
+                    {
+                        "Field": "host-header",
+                        "Values": [
+                            {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "helloworld",
+                                        ".",
+                                        "staging.",
+                                        {
+                                            "Ref": "DomainName"
+                                        }
+                                    ]
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "ListenerArn": {
+                    "Ref": "Listener"
+                },
+                "Priority": 1
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::ListenerRule"
+        },
+        "staginggoodbyeworldTargetGroup": {
+            "DependsOn": "LoadBalancer",
+            "Properties": {
+                "HealthCheckIntervalSeconds": "20",
+                "HealthCheckPath": "/goodbyeworld",
+                "HealthCheckProtocol": "HTTP",
+                "HealthCheckTimeoutSeconds": "15",
+                "HealthyThresholdCount": "5",
+                "Matcher": {
+                    "HttpCode": "200"
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "staging",
+                            "goodbyeworld",
+                            "TG"
+                        ]
+                    ]
+                },
+                "Port": 3000,
+                "Protocol": "HTTP",
+                "UnhealthyThresholdCount": "3",
+                "VpcId": {
+                    "Fn::ImportValue": {
+                        "Fn::Join": [
+                            "-",
+                            [
+                                {
+                                    "Fn::Select": [
+                                        0,
+                                        {
+                                            "Fn::Split": [
+                                                "-",
+                                                {
+                                                    "Ref": "AWS::StackName"
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                "cluster-vpc-id"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::TargetGroup"
+        },
+        "staginghelloworldTargetGroup": {
+            "DependsOn": "LoadBalancer",
+            "Properties": {
+                "HealthCheckIntervalSeconds": "20",
+                "HealthCheckPath": "/helloworld",
+                "HealthCheckProtocol": "HTTP",
+                "HealthCheckTimeoutSeconds": "15",
+                "HealthyThresholdCount": "5",
+                "Matcher": {
+                    "HttpCode": "200"
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "staging",
+                            "helloworld",
+                            "TG"
+                        ]
+                    ]
+                },
+                "Port": 3000,
+                "Protocol": "HTTP",
+                "UnhealthyThresholdCount": "3",
+                "VpcId": {
+                    "Fn::ImportValue": {
+                        "Fn::Join": [
+                            "-",
+                            [
+                                {
+                                    "Fn::Select": [
+                                        0,
+                                        {
+                                            "Fn::Split": [
+                                                "-",
+                                                {
+                                                    "Ref": "AWS::StackName"
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                "cluster-vpc-id"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::TargetGroup"
+        }
+    }
+}
