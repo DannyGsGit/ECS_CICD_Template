@@ -73,7 +73,6 @@ t.add_description("New Service CICD Pipeline")
 t.add_parameter(Parameter(
     "RepoName",
     Type="String",
-    Default="helloworld",
     Description="Name of the CodeCommit repository to source"
 ))
 

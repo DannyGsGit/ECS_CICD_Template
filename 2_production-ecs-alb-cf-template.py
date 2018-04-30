@@ -11,6 +11,7 @@ from troposphere import (
     Ref,
     Select,
     Split,
+    Parameter,
     Sub,
     Template,
     ec2
@@ -27,9 +28,7 @@ to multiple services on an ECS cluster.
 
 # Define a list of services, in order of priority, to be routed by the ALB:
 services = ["helloworld", "goodbyeworld"]
-
-
-
+EnvironmentType = "production"
 
 # Define a Security group with Port 80, this is the port the LB will listen on
 t.add_resource(ec2.SecurityGroup(
@@ -78,8 +77,8 @@ t.add_resource(elb.LoadBalancer(
 for s in services:
     t.add_resource(elb.TargetGroup(
         #"TargetGroup",
-        "{}TargetGroup".format(s),
-        Name=Join("-", [s, "TargetGroup"]),
+        "{}{}TargetGroup".format(EnvironmentType, s),
+        Name=Join("-", [EnvironmentType, s, "TG"]),
         DependsOn='LoadBalancer',
         HealthCheckIntervalSeconds="20",
         HealthCheckProtocol="HTTP",
@@ -110,7 +109,7 @@ t.add_resource(elb.Listener(
     LoadBalancerArn=Ref("LoadBalancer"),
     DefaultActions=[elb.Action(
         Type="forward",
-        TargetGroupArn=Ref("{}TargetGroup".format(services[0]))
+        TargetGroupArn=Ref("{}{}TargetGroup".format(EnvironmentType, services[0]))
     )]
 ))
 
@@ -123,10 +122,10 @@ for s in services:
             ListenerArn=Ref("Listener"),
             Conditions=[elb.Condition(
                 Field="path-pattern",
-                Values=["/{}".format(s)])],
+                Values=["/{}-{}".format(EnvironmentType, s)])],
             Actions=[elb.Action(
                 Type="forward",
-                TargetGroupArn=Ref("{}TargetGroup".format(s))
+                TargetGroupArn=Ref("{}{}TargetGroup".format(EnvironmentType, s))
             )],
             Priority=priority
         ))
@@ -137,17 +136,19 @@ for s in services:
 
 for s in services:
     t.add_output(Output(
-        "{}TargetGroup".format(s),
-        Description="Target group for {}".format(s),
-        Value=Ref("{}TargetGroup".format(s)),
-        Export=Export(Sub("{}-target-group".format(s))),
+        "{}{}TargetGroup".format(EnvironmentType, s),
+        Description="Target group for {} {}".format(EnvironmentType, s),
+        Value=Ref("{}{}TargetGroup".format(EnvironmentType, s)),
+        Export=Export(Sub("{}-{}-tg".format(EnvironmentType, s)))
     ))
 
 
     t.add_output(Output(
         "{}URL".format(s),
         Description="Loadbalancer URL for {}".format(s),
-        Value=Join("", ["http://", GetAtt("LoadBalancer", "DNSName"), "/", s])
+        Value=Join("", ["http://", GetAtt("LoadBalancer", "DNSName"), "/", EnvironmentType, "-", s])
     ))
+
+
 
 print(t.to_json())

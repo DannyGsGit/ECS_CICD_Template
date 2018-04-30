@@ -33,8 +33,6 @@ t = Template()
 t.add_description("ECS service")
 
 
-
-
 t.add_parameter(Parameter(
     "Tag",
     Type="String",
@@ -107,7 +105,8 @@ t.add_resource(ecs.Service(
             Join(
                 "-",
                 [Select(0, Split("-", Ref("AWS::StackName"))),
-                    "alb-target-group"]
+                Select(1, Split("-", Ref("AWS::StackName"))),
+                    "tg"]
             ),
         ),
     )],
