@@ -345,7 +345,7 @@ t.add_resource(Pipeline(
                         "ActionMode": "CREATE_UPDATE",
                         "StackName": Join(
                                 "-",
-                                ["staging",
+                                ["stag",
                                 Select(0, Split("-", Ref("AWS::StackName"))),
                                 "service"]
                         ),
@@ -397,7 +397,7 @@ t.add_resource(Pipeline(
                         "ActionMode": "CREATE_UPDATE",
                         "StackName": Join(
                                 "-",
-                                ["production",
+                                ["prod",
                                 Select(0, Split("-", Ref("AWS::StackName"))),
                                 "service"]
                         ),

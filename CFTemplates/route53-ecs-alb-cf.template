@@ -1,0 +1,771 @@
+{
+    "Description": "Multi-path ALB for the ECS Cluster",
+    "Mappings": {
+        "RegionZIDMap": {
+            "us-east-1": {
+                "ZoneID": "Z35SXDOTRQ7X7K"
+            },
+            "us-west-1": {
+                "ZoneID": "Z368ELLRRE2KJ0"
+            },
+            "us-west-2": {
+                "ZoneID": "Z1H1FL5HABSF5"
+            }
+        }
+    },
+    "Outputs": {
+        "prodgoodbyeworldTargetGroup": {
+            "Description": "Target group for prod goodbyeworld",
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "prod-goodbyeworld-tg"
+                }
+            },
+            "Value": {
+                "Ref": "prodgoodbyeworldTargetGroup"
+            }
+        },
+        "prodgoodbyeworldURL": {
+            "Description": "Loadbalancer URL for goodbyeworld in prod",
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        "http://",
+                        "goodbyeworld",
+                        ".",
+                        "",
+                        {
+                            "Ref": "DomainName"
+                        }
+                    ]
+                ]
+            }
+        },
+        "prodhelloworldTargetGroup": {
+            "Description": "Target group for prod helloworld",
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "prod-helloworld-tg"
+                }
+            },
+            "Value": {
+                "Ref": "prodhelloworldTargetGroup"
+            }
+        },
+        "prodhelloworldURL": {
+            "Description": "Loadbalancer URL for helloworld in prod",
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        "http://",
+                        "helloworld",
+                        ".",
+                        "",
+                        {
+                            "Ref": "DomainName"
+                        }
+                    ]
+                ]
+            }
+        },
+        "staggoodbyeworldTargetGroup": {
+            "Description": "Target group for stag goodbyeworld",
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "stag-goodbyeworld-tg"
+                }
+            },
+            "Value": {
+                "Ref": "staggoodbyeworldTargetGroup"
+            }
+        },
+        "staggoodbyeworldURL": {
+            "Description": "Loadbalancer URL for goodbyeworld in stag",
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        "http://",
+                        "goodbyeworld",
+                        ".",
+                        "stag.",
+                        {
+                            "Ref": "DomainName"
+                        }
+                    ]
+                ]
+            }
+        },
+        "staghelloworldTargetGroup": {
+            "Description": "Target group for stag helloworld",
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "stag-helloworld-tg"
+                }
+            },
+            "Value": {
+                "Ref": "staghelloworldTargetGroup"
+            }
+        },
+        "staghelloworldURL": {
+            "Description": "Loadbalancer URL for helloworld in stag",
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        "http://",
+                        "helloworld",
+                        ".",
+                        "stag.",
+                        {
+                            "Ref": "DomainName"
+                        }
+                    ]
+                ]
+            }
+        }
+    },
+    "Parameters": {
+        "DomainName": {
+            "Default": "data-muffin.com",
+            "Description": "Domain name registered in Route53",
+            "Type": "String"
+        }
+    },
+    "Resources": {
+        "prodELBSecurityGroup": {
+            "Properties": {
+                "GroupDescription": "Web load balancer security group.",
+                "SecurityGroupIngress": [
+                    {
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": "80",
+                        "IpProtocol": "tcp",
+                        "ToPort": "80"
+                    }
+                ],
+                "VpcId": {
+                    "Fn::ImportValue": {
+                        "Fn::Join": [
+                            "-",
+                            [
+                                "prod",
+                                "cluster-vpc-id"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Type": "AWS::EC2::SecurityGroup"
+        },
+        "prodListener": {
+            "Properties": {
+                "DefaultActions": [
+                    {
+                        "TargetGroupArn": {
+                            "Ref": "prodhelloworldTargetGroup"
+                        },
+                        "Type": "forward"
+                    }
+                ],
+                "LoadBalancerArn": {
+                    "Ref": "prodLoadBalancer"
+                },
+                "Port": "80",
+                "Protocol": "HTTP"
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::Listener"
+        },
+        "prodLoadBalancer": {
+            "Properties": {
+                "Scheme": "internet-facing",
+                "SecurityGroups": [
+                    {
+                        "Ref": "prodELBSecurityGroup"
+                    }
+                ],
+                "Subnets": {
+                    "Fn::Split": [
+                        ",",
+                        {
+                            "Fn::ImportValue": {
+                                "Fn::Join": [
+                                    "-",
+                                    [
+                                        "prod",
+                                        "cluster-public-subnets"
+                                    ]
+                                ]
+                            }
+                        }
+                    ]
+                }
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer"
+        },
+        "prodgoodbyeworldDNSRecord": {
+            "Properties": {
+                "AliasTarget": {
+                    "DNSName": {
+                        "Fn::GetAtt": [
+                            "prodLoadBalancer",
+                            "DNSName"
+                        ]
+                    },
+                    "HostedZoneId": {
+                        "Fn::FindInMap": [
+                            "RegionZIDMap",
+                            {
+                                "Ref": "AWS::Region"
+                            },
+                            "ZoneID"
+                        ]
+                    }
+                },
+                "HostedZoneName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            {
+                                "Ref": "DomainName"
+                            },
+                            "."
+                        ]
+                    ]
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            "goodbyeworld",
+                            ".",
+                            "",
+                            {
+                                "Ref": "DomainName"
+                            },
+                            "."
+                        ]
+                    ]
+                },
+                "Type": "A"
+            },
+            "Type": "AWS::Route53::RecordSet"
+        },
+        "prodgoodbyeworldListenerRule": {
+            "Properties": {
+                "Actions": [
+                    {
+                        "TargetGroupArn": {
+                            "Ref": "prodgoodbyeworldTargetGroup"
+                        },
+                        "Type": "forward"
+                    }
+                ],
+                "Conditions": [
+                    {
+                        "Field": "host-header",
+                        "Values": [
+                            {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "goodbyeworld",
+                                        ".",
+                                        "",
+                                        {
+                                            "Ref": "DomainName"
+                                        }
+                                    ]
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "ListenerArn": {
+                    "Ref": "prodListener"
+                },
+                "Priority": 2
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::ListenerRule"
+        },
+        "prodgoodbyeworldTargetGroup": {
+            "DependsOn": "prodLoadBalancer",
+            "Properties": {
+                "HealthCheckIntervalSeconds": "20",
+                "HealthCheckPath": "/goodbyeworld",
+                "HealthCheckProtocol": "HTTP",
+                "HealthCheckTimeoutSeconds": "15",
+                "HealthyThresholdCount": "5",
+                "Matcher": {
+                    "HttpCode": "200"
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "prod",
+                            "goodbyeworld",
+                            "TG"
+                        ]
+                    ]
+                },
+                "Port": 3000,
+                "Protocol": "HTTP",
+                "UnhealthyThresholdCount": "3",
+                "VpcId": {
+                    "Fn::ImportValue": {
+                        "Fn::Join": [
+                            "-",
+                            [
+                                "prod",
+                                "cluster-vpc-id"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::TargetGroup"
+        },
+        "prodhelloworldDNSRecord": {
+            "Properties": {
+                "AliasTarget": {
+                    "DNSName": {
+                        "Fn::GetAtt": [
+                            "prodLoadBalancer",
+                            "DNSName"
+                        ]
+                    },
+                    "HostedZoneId": {
+                        "Fn::FindInMap": [
+                            "RegionZIDMap",
+                            {
+                                "Ref": "AWS::Region"
+                            },
+                            "ZoneID"
+                        ]
+                    }
+                },
+                "HostedZoneName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            {
+                                "Ref": "DomainName"
+                            },
+                            "."
+                        ]
+                    ]
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            "helloworld",
+                            ".",
+                            "",
+                            {
+                                "Ref": "DomainName"
+                            },
+                            "."
+                        ]
+                    ]
+                },
+                "Type": "A"
+            },
+            "Type": "AWS::Route53::RecordSet"
+        },
+        "prodhelloworldListenerRule": {
+            "Properties": {
+                "Actions": [
+                    {
+                        "TargetGroupArn": {
+                            "Ref": "prodhelloworldTargetGroup"
+                        },
+                        "Type": "forward"
+                    }
+                ],
+                "Conditions": [
+                    {
+                        "Field": "host-header",
+                        "Values": [
+                            {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "helloworld",
+                                        ".",
+                                        "",
+                                        {
+                                            "Ref": "DomainName"
+                                        }
+                                    ]
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "ListenerArn": {
+                    "Ref": "prodListener"
+                },
+                "Priority": 1
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::ListenerRule"
+        },
+        "prodhelloworldTargetGroup": {
+            "DependsOn": "prodLoadBalancer",
+            "Properties": {
+                "HealthCheckIntervalSeconds": "20",
+                "HealthCheckPath": "/helloworld",
+                "HealthCheckProtocol": "HTTP",
+                "HealthCheckTimeoutSeconds": "15",
+                "HealthyThresholdCount": "5",
+                "Matcher": {
+                    "HttpCode": "200"
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "prod",
+                            "helloworld",
+                            "TG"
+                        ]
+                    ]
+                },
+                "Port": 3000,
+                "Protocol": "HTTP",
+                "UnhealthyThresholdCount": "3",
+                "VpcId": {
+                    "Fn::ImportValue": {
+                        "Fn::Join": [
+                            "-",
+                            [
+                                "prod",
+                                "cluster-vpc-id"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::TargetGroup"
+        },
+        "stagELBSecurityGroup": {
+            "Properties": {
+                "GroupDescription": "Web load balancer security group.",
+                "SecurityGroupIngress": [
+                    {
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": "80",
+                        "IpProtocol": "tcp",
+                        "ToPort": "80"
+                    }
+                ],
+                "VpcId": {
+                    "Fn::ImportValue": {
+                        "Fn::Join": [
+                            "-",
+                            [
+                                "stag",
+                                "cluster-vpc-id"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Type": "AWS::EC2::SecurityGroup"
+        },
+        "stagListener": {
+            "Properties": {
+                "DefaultActions": [
+                    {
+                        "TargetGroupArn": {
+                            "Ref": "staghelloworldTargetGroup"
+                        },
+                        "Type": "forward"
+                    }
+                ],
+                "LoadBalancerArn": {
+                    "Ref": "stagLoadBalancer"
+                },
+                "Port": "80",
+                "Protocol": "HTTP"
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::Listener"
+        },
+        "stagLoadBalancer": {
+            "Properties": {
+                "Scheme": "internet-facing",
+                "SecurityGroups": [
+                    {
+                        "Ref": "stagELBSecurityGroup"
+                    }
+                ],
+                "Subnets": {
+                    "Fn::Split": [
+                        ",",
+                        {
+                            "Fn::ImportValue": {
+                                "Fn::Join": [
+                                    "-",
+                                    [
+                                        "stag",
+                                        "cluster-public-subnets"
+                                    ]
+                                ]
+                            }
+                        }
+                    ]
+                }
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer"
+        },
+        "staggoodbyeworldDNSRecord": {
+            "Properties": {
+                "AliasTarget": {
+                    "DNSName": {
+                        "Fn::GetAtt": [
+                            "stagLoadBalancer",
+                            "DNSName"
+                        ]
+                    },
+                    "HostedZoneId": {
+                        "Fn::FindInMap": [
+                            "RegionZIDMap",
+                            {
+                                "Ref": "AWS::Region"
+                            },
+                            "ZoneID"
+                        ]
+                    }
+                },
+                "HostedZoneName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            {
+                                "Ref": "DomainName"
+                            },
+                            "."
+                        ]
+                    ]
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            "goodbyeworld",
+                            ".",
+                            "stag.",
+                            {
+                                "Ref": "DomainName"
+                            },
+                            "."
+                        ]
+                    ]
+                },
+                "Type": "A"
+            },
+            "Type": "AWS::Route53::RecordSet"
+        },
+        "staggoodbyeworldListenerRule": {
+            "Properties": {
+                "Actions": [
+                    {
+                        "TargetGroupArn": {
+                            "Ref": "staggoodbyeworldTargetGroup"
+                        },
+                        "Type": "forward"
+                    }
+                ],
+                "Conditions": [
+                    {
+                        "Field": "host-header",
+                        "Values": [
+                            {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "goodbyeworld",
+                                        ".",
+                                        "stag.",
+                                        {
+                                            "Ref": "DomainName"
+                                        }
+                                    ]
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "ListenerArn": {
+                    "Ref": "stagListener"
+                },
+                "Priority": 2
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::ListenerRule"
+        },
+        "staggoodbyeworldTargetGroup": {
+            "DependsOn": "stagLoadBalancer",
+            "Properties": {
+                "HealthCheckIntervalSeconds": "20",
+                "HealthCheckPath": "/goodbyeworld",
+                "HealthCheckProtocol": "HTTP",
+                "HealthCheckTimeoutSeconds": "15",
+                "HealthyThresholdCount": "5",
+                "Matcher": {
+                    "HttpCode": "200"
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "stag",
+                            "goodbyeworld",
+                            "TG"
+                        ]
+                    ]
+                },
+                "Port": 3000,
+                "Protocol": "HTTP",
+                "UnhealthyThresholdCount": "3",
+                "VpcId": {
+                    "Fn::ImportValue": {
+                        "Fn::Join": [
+                            "-",
+                            [
+                                "stag",
+                                "cluster-vpc-id"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::TargetGroup"
+        },
+        "staghelloworldDNSRecord": {
+            "Properties": {
+                "AliasTarget": {
+                    "DNSName": {
+                        "Fn::GetAtt": [
+                            "stagLoadBalancer",
+                            "DNSName"
+                        ]
+                    },
+                    "HostedZoneId": {
+                        "Fn::FindInMap": [
+                            "RegionZIDMap",
+                            {
+                                "Ref": "AWS::Region"
+                            },
+                            "ZoneID"
+                        ]
+                    }
+                },
+                "HostedZoneName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            {
+                                "Ref": "DomainName"
+                            },
+                            "."
+                        ]
+                    ]
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            "helloworld",
+                            ".",
+                            "stag.",
+                            {
+                                "Ref": "DomainName"
+                            },
+                            "."
+                        ]
+                    ]
+                },
+                "Type": "A"
+            },
+            "Type": "AWS::Route53::RecordSet"
+        },
+        "staghelloworldListenerRule": {
+            "Properties": {
+                "Actions": [
+                    {
+                        "TargetGroupArn": {
+                            "Ref": "staghelloworldTargetGroup"
+                        },
+                        "Type": "forward"
+                    }
+                ],
+                "Conditions": [
+                    {
+                        "Field": "host-header",
+                        "Values": [
+                            {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "helloworld",
+                                        ".",
+                                        "stag.",
+                                        {
+                                            "Ref": "DomainName"
+                                        }
+                                    ]
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "ListenerArn": {
+                    "Ref": "stagListener"
+                },
+                "Priority": 1
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::ListenerRule"
+        },
+        "staghelloworldTargetGroup": {
+            "DependsOn": "stagLoadBalancer",
+            "Properties": {
+                "HealthCheckIntervalSeconds": "20",
+                "HealthCheckPath": "/helloworld",
+                "HealthCheckProtocol": "HTTP",
+                "HealthCheckTimeoutSeconds": "15",
+                "HealthyThresholdCount": "5",
+                "Matcher": {
+                    "HttpCode": "200"
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "stag",
+                            "helloworld",
+                            "TG"
+                        ]
+                    ]
+                },
+                "Port": 3000,
+                "Protocol": "HTTP",
+                "UnhealthyThresholdCount": "3",
+                "VpcId": {
+                    "Fn::ImportValue": {
+                        "Fn::Join": [
+                            "-",
+                            [
+                                "stag",
+                                "cluster-vpc-id"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::TargetGroup"
+        }
+    }
+}

@@ -29,5 +29,6 @@ It is recommended to name the stack with format **appname-codepipeline**, and li
 - [ ] Shorten prod/staging names
 - [ ] CodePipeline for ALBs
 - [ ] Scaling rules for containers
-- [ ] Get Scout2 working
+- [ ] Template for scheduled tasks
+- [ ] Get Scout2 working properly
 - [ ] Get CloudWatch dashboards coded
