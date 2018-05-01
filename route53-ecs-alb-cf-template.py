@@ -142,8 +142,8 @@ t.add_resource(elb.Listener(
 
 # t.add_resource(route53.AliasTarget(
 #     "AliasTargetString",
-#     HostedZoneId="123432432",
-#     DNSName="dsfdsfsdf"
+#     DNSName=GetAtt("LoadBalancer", "DNSName"),
+#     HostedZoneId=FindInMap("RegionZIDMap", Ref("AWS::Region"), "ZoneID")
 # ))
 
 for s in services:
@@ -164,14 +164,16 @@ for s in services:
         ))
 
 
-
+#################### Add environment to logical description ##########################
     t.add_resource(route53.RecordSetType(
         "{}DNSRecord".format(s),
         HostedZoneName=Join("", [Ref("DomainName"), "."]),
-        Comment="DNS name for my instance.",
         Name=Join("", [s, ".", URLPathMod, Ref("DomainName"), "."]),
         Type="A",
-        AliasTarget=Ref("AliasTargetString")
+        AliasTarget=route53.AliasTarget(
+            FindInMap("RegionZIDMap", Ref("AWS::Region"), "ZoneID"),
+            GetAtt("LoadBalancer", "DNSName")
+        )
     ))
 
 
@@ -203,6 +205,7 @@ t.add_output(Output(
     "LBZoneID",
     Description="Load Balancer Zone ID",
     Value= FindInMap("RegionZIDMap", Ref("AWS::Region"), "ZoneID")
+    #Value=GetAtt("LoadBalancer", "CanonicalHostedZoneNameID")
 ))
 
 

@@ -195,9 +195,22 @@
         "goodbyeworldDNSRecord": {
             "Properties": {
                 "AliasTarget": {
-                    "Ref": "AliasTargetString"
+                    "DNSName": {
+                        "Fn::GetAtt": [
+                            "LoadBalancer",
+                            "DNSName"
+                        ]
+                    },
+                    "HostedZoneId": {
+                        "Fn::FindInMap": [
+                            "RegionZIDMap",
+                            {
+                                "Ref": "AWS::Region"
+                            },
+                            "ZoneID"
+                        ]
+                    }
                 },
-                "Comment": "DNS name for my instance.",
                 "HostedZoneName": {
                     "Fn::Join": [
                         "",
@@ -267,9 +280,22 @@
         "helloworldDNSRecord": {
             "Properties": {
                 "AliasTarget": {
-                    "Ref": "AliasTargetString"
+                    "DNSName": {
+                        "Fn::GetAtt": [
+                            "LoadBalancer",
+                            "DNSName"
+                        ]
+                    },
+                    "HostedZoneId": {
+                        "Fn::FindInMap": [
+                            "RegionZIDMap",
+                            {
+                                "Ref": "AWS::Region"
+                            },
+                            "ZoneID"
+                        ]
+                    }
                 },
-                "Comment": "DNS name for my instance.",
                 "HostedZoneName": {
                     "Fn::Join": [
                         "",
