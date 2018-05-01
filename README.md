@@ -24,7 +24,7 @@ It is recommended to name the stack with format **appname-codepipeline**, and li
 # Plan/ To Do:
 
 - [x] Implement path-based routing pipe with simple appname by linking Services to ALB Paths
-- [ ] Update ALB for host-based routing connected to Route53
+- [ ] Update ALB template for host-based routing connected to Route53
 - [ ] Lock down security group on Route53/ALB
 - [ ] Shorten prod/staging names
 - [ ] CodePipeline for ALBs

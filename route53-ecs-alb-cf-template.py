@@ -140,11 +140,7 @@ t.add_resource(elb.Listener(
 ))
 
 
-# t.add_resource(route53.AliasTarget(
-#     "AliasTargetString",
-#     DNSName=GetAtt("LoadBalancer", "DNSName"),
-#     HostedZoneId=FindInMap("RegionZIDMap", Ref("AWS::Region"), "ZoneID")
-# ))
+
 
 for s in services:
     priority = services.index(s) + 1
@@ -192,21 +188,9 @@ for s in services:
     t.add_output(Output(
         "{}URL".format(s),
         Description="Loadbalancer URL for {}".format(s),
-        Value=Join("", [s, ".", URLPathMod, Ref("DomainName")])
+        Value=Join("", ["http:\\", s, ".", URLPathMod, Ref("DomainName")])
     ))
 
-t.add_output(Output(
-    "LBDNS",
-    Description="Load Balancer DNS",
-    Value= GetAtt("LoadBalancer", "DNSName")
-))
-
-t.add_output(Output(
-    "LBZoneID",
-    Description="Load Balancer Zone ID",
-    Value= FindInMap("RegionZIDMap", Ref("AWS::Region"), "ZoneID")
-    #Value=GetAtt("LoadBalancer", "CanonicalHostedZoneNameID")
-))
 
 
 print(t.to_json())
