@@ -1,0 +1,394 @@
+{
+    "Description": "ALB and Route53 Pipeline",
+    "Outputs": {
+        "CodebuildName": {
+            "Description": "Codebuild Name",
+            "Value": {
+                "Fn::Join": [
+                    "-",
+                    [
+                        {
+                            "Fn::Select": [
+                                0,
+                                {
+                                    "Fn::Split": [
+                                        "-",
+                                        {
+                                            "Ref": "AWS::StackName"
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        "codebuild"
+                    ]
+                ]
+            }
+        }
+    },
+    "Parameters": {
+        "RepoName": {
+            "Default": "alb-route53-cf",
+            "Description": "Name of the CodeCommit repository to source",
+            "Type": "String"
+        },
+        "Route53DomainName": {
+            "Default": "data-muffin.com",
+            "Description": "Domain name registered in Route53",
+            "Type": "String"
+        }
+    },
+    "Resources": {
+        "CloudFormationNetworkRole": {
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "sts:AssumeRole"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "cloudformation.amazonaws.com"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyDocument": {
+                            "Statement": [
+                                {
+                                    "Action": "cloudformation:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "ecr:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "ecs:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "iam:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "codecommit:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                }
+                            ]
+                        },
+                        "PolicyName": "CloudFormationNetworkPolicy"
+                    }
+                ],
+                "RoleName": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            {
+                                "Fn::Select": [
+                                    0,
+                                    {
+                                        "Fn::Split": [
+                                            "-",
+                                            {
+                                                "Ref": "AWS::StackName"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            "CloudFormationNetworkRole"
+                        ]
+                    ]
+                }
+            },
+            "Type": "AWS::IAM::Role"
+        },
+        "CodeBuild": {
+            "Properties": {
+                "Artifacts": {
+                    "Name": "output",
+                    "Type": "CODEPIPELINE"
+                },
+                "Environment": {
+                    "ComputeType": "BUILD_GENERAL1_SMALL",
+                    "EnvironmentVariables": [],
+                    "Image": "aws/codebuild/python:3.5.2",
+                    "Type": "LINUX_CONTAINER"
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            {
+                                "Fn::Select": [
+                                    0,
+                                    {
+                                        "Fn::Split": [
+                                            "-",
+                                            {
+                                                "Ref": "AWS::StackName"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            "codebuild"
+                        ]
+                    ]
+                },
+                "ServiceRole": {
+                    "Ref": "ServiceRole"
+                },
+                "Source": {
+                    "BuildSpec": "version: 0.1\nphases:\n  pre_build:\n    commands:\n      - pip install troposphere\n      - pip install pyyaml\n  build:\n    commands:\n      - echo \"Starting python execution\"\n      - python alb-route53-cf-template.py > /tmp/alb-route53-cf.template\n  post_build:\n    commands:\n      - echo \"Completed CFN template creation.\"\nartifacts:\n  files: /tmp/alb-route53-cf.template\n  discard-paths: yes\n",
+                    "Type": "CODEPIPELINE"
+                }
+            },
+            "Type": "AWS::CodeBuild::Project"
+        },
+        "NetworkPipeline": {
+            "Properties": {
+                "ArtifactStore": {
+                    "Location": {
+                        "Ref": "S3Bucket"
+                    },
+                    "Type": "S3"
+                },
+                "RoleArn": {
+                    "Fn::GetAtt": [
+                        "PipelineRole",
+                        "Arn"
+                    ]
+                },
+                "Stages": [
+                    {
+                        "Actions": [
+                            {
+                                "ActionTypeId": {
+                                    "Category": "Source",
+                                    "Owner": "AWS",
+                                    "Provider": "CodeCommit",
+                                    "Version": "1"
+                                },
+                                "Configuration": {
+                                    "BranchName": "master",
+                                    "RepositoryName": {
+                                        "Ref": "RepoName"
+                                    }
+                                },
+                                "Name": "Source",
+                                "OutputArtifacts": [
+                                    {
+                                        "Name": "App"
+                                    }
+                                ]
+                            }
+                        ],
+                        "Name": "Source"
+                    },
+                    {
+                        "Actions": [
+                            {
+                                "ActionTypeId": {
+                                    "Category": "Build",
+                                    "Owner": "AWS",
+                                    "Provider": "CodeBuild",
+                                    "Version": "1"
+                                },
+                                "Configuration": {
+                                    "ProjectName": {
+                                        "Fn::Join": [
+                                            "-",
+                                            [
+                                                {
+                                                    "Fn::Select": [
+                                                        0,
+                                                        {
+                                                            "Fn::Split": [
+                                                                "-",
+                                                                {
+                                                                    "Ref": "AWS::StackName"
+                                                                }
+                                                            ]
+                                                        }
+                                                    ]
+                                                },
+                                                "codebuild"
+                                            ]
+                                        ]
+                                    }
+                                },
+                                "InputArtifacts": [
+                                    {
+                                        "Name": "App"
+                                    }
+                                ],
+                                "Name": "Container",
+                                "OutputArtifacts": [
+                                    {
+                                        "Name": "BuildOutput"
+                                    }
+                                ]
+                            }
+                        ],
+                        "Name": "Build"
+                    },
+                    {
+                        "Actions": [
+                            {
+                                "ActionTypeId": {
+                                    "Category": "Deploy",
+                                    "Owner": "AWS",
+                                    "Provider": "CloudFormation",
+                                    "Version": "1"
+                                },
+                                "Configuration": {
+                                    "ActionMode": "CREATE_UPDATE",
+                                    "Capabilities": "CAPABILITY_NAMED_IAM",
+                                    "ChangeSetName": "Deploy",
+                                    "RoleArn": {
+                                        "Fn::GetAtt": [
+                                            "CloudFormationNetworkRole",
+                                            "Arn"
+                                        ]
+                                    },
+                                    "StackName": "ALB-Route53-Resources",
+                                    "TemplatePath": "BuildOutput::alb-route53-cf.template"
+                                },
+                                "InputArtifacts": [
+                                    {
+                                        "Name": "App"
+                                    },
+                                    {
+                                        "Name": "BuildOutput"
+                                    }
+                                ],
+                                "Name": "Deploy"
+                            }
+                        ],
+                        "Name": "Deploy"
+                    }
+                ]
+            },
+            "Type": "AWS::CodePipeline::Pipeline"
+        },
+        "PipelineRole": {
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "sts:AssumeRole"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "codepipeline.amazonaws.com"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyDocument": {
+                            "Statement": [
+                                {
+                                    "Action": "cloudformation:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "codebuild:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "codepipeline:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "ecr:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "ecs:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "iam:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "s3:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "codecommit:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                }
+                            ]
+                        },
+                        "PolicyName": "NetworkCodePipeline"
+                    }
+                ]
+            },
+            "Type": "AWS::IAM::Role"
+        },
+        "S3Bucket": {
+            "Properties": {
+                "VersioningConfiguration": {
+                    "Status": "Enabled"
+                }
+            },
+            "Type": "AWS::S3::Bucket"
+        },
+        "ServiceRole": {
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "sts:AssumeRole"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "codebuild.amazonaws.com"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/AWSCodePipelineReadOnlyAccess",
+                    "arn:aws:iam::aws:policy/AWSCodeBuildDeveloperAccess",
+                    "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser",
+                    "arn:aws:iam::aws:policy/AmazonS3FullAccess",
+                    "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
+                ],
+                "Path": "/"
+            },
+            "Type": "AWS::IAM::Role"
+        }
+    }
+}
