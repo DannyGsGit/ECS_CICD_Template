@@ -40,12 +40,19 @@ to multiple services on an ECS cluster.
 # Define a list of services, in order of priority, to be routed by the ALB:
 with open('services.yaml', 'r') as f:
     doc = yaml.load(f)
-domain = next(iter(doc))
-services = doc[domain]
+
+services = doc['services']
 
 Environments = ["stag", "prod"]
 
 
+
+t.add_parameter(Parameter(
+    "DomainName",
+    Type="String",
+    Default="data-muffin.com",
+    Description="Domain name registered in Route53"
+))
 
 
 
@@ -154,7 +161,7 @@ for e in Environments:
                 ListenerArn=Ref("{}Listener".format(e)),
                 Conditions=[elb.Condition(
                     Field="host-header",
-                    Values=[Join("", [s, ".", URLPathMod, domain])]
+                    Values=[Join("", [s, ".", URLPathMod, Ref("DomainName")])]
                     )],
                 Actions=[elb.Action(
                     Type="forward",
@@ -166,8 +173,8 @@ for e in Environments:
 
         t.add_resource(route53.RecordSetType(
             "{}{}DNSRecord".format(e, s),
-            HostedZoneName=Join("", [domain, "."]),
-            Name=Join("", [s, ".", URLPathMod, domain, "."]),
+            HostedZoneName=Join("", [Ref("DomainName"), "."]),
+            Name=Join("", [s, ".", URLPathMod, Ref("DomainName"), "."]),
             Type="A",
             AliasTarget=route53.AliasTarget(
                 FindInMap("RegionZIDMap", Ref("AWS::Region"), "ZoneID"),
@@ -191,7 +198,7 @@ for e in Environments:
         t.add_output(Output(
             "{}{}URL".format(e, s),
             Description="Loadbalancer URL for {} in {}".format(s, e),
-            Value=Join("", ["http://", s, ".", URLPathMod, domain])
+            Value=Join("", ["http://", s, ".", URLPathMod, Ref("DomainName")])
         ))
 
 

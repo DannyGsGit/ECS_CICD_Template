@@ -255,6 +255,9 @@ t.add_resource(Role(
                     {"Effect": "Allow", "Action": "ecr:*", "Resource": "*"},
                     {"Effect": "Allow", "Action": "ecs:*", "Resource": "*"},
                     {"Effect": "Allow", "Action": "iam:*", "Resource": "*"},
+                    {"Effect": "Allow", "Action": "ec2:*", "Resource": "*"},
+                    {"Effect": "Allow", "Action": "elasticloadbalancing:*", "Resource": "*"},
+                    {"Effect": "Allow", "Action": "route53:*", "Resource": "*"},
                     {"Effect": "Allow", "Action": "codecommit:*", "Resource": "*"},
                 ],
             }
