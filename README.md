@@ -25,10 +25,11 @@ It is recommended to name the stack with format **appname-codepipeline**, and li
 
 - [x] Implement path-based routing pipe with simple appname by linking Services to ALB Paths
 - [x] Update ALB template for host-based routing connected to Route53
+- [x] Shorten prod/staging names
+
 - [ ] Lock down security group on Route53/ALB
 - [ ] CodePipeline for all infrastructure
 - [ ] Clean up ELB/Domain work
-- [x] Shorten prod/staging names
 - [ ] Cloudwatch logging
 - [ ] Get CloudWatch dashboards coded
 - [ ] Move resources into private subnets of VPC
