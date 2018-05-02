@@ -1,0 +1,579 @@
+{
+    "Description": "New Service CICD Pipeline",
+    "Outputs": {
+        "CodebuildName": {
+            "Description": "Codebuild Name",
+            "Value": {
+                "Fn::Join": [
+                    "-",
+                    [
+                        {
+                            "Fn::Select": [
+                                0,
+                                {
+                                    "Fn::Split": [
+                                        "-",
+                                        {
+                                            "Ref": "AWS::StackName"
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        "codebuild"
+                    ]
+                ]
+            }
+        },
+        "Repository": {
+            "Description": "ECR repository",
+            "Export": {
+                "Name": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            {
+                                "Ref": "RepoName"
+                            },
+                            "repo"
+                        ]
+                    ]
+                }
+            },
+            "Value": {
+                "Fn::Select": [
+                    0,
+                    {
+                        "Fn::Split": [
+                            "-",
+                            {
+                                "Ref": "AWS::StackName"
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    },
+    "Parameters": {
+        "RepoName": {
+            "Description": "Name of the CodeCommit repository to source",
+            "Type": "String"
+        }
+    },
+    "Resources": {
+        "CloudFormationECSRole": {
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "sts:AssumeRole"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "cloudformation.amazonaws.com"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyDocument": {
+                            "Statement": [
+                                {
+                                    "Action": "cloudformation:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "ecr:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "ecs:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "iam:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "codecommit:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                }
+                            ]
+                        },
+                        "PolicyName": "CloudFormationECSPolicy"
+                    }
+                ],
+                "RoleName": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            {
+                                "Fn::Select": [
+                                    0,
+                                    {
+                                        "Fn::Split": [
+                                            "-",
+                                            {
+                                                "Ref": "AWS::StackName"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            "CloudFormationECSRole"
+                        ]
+                    ]
+                }
+            },
+            "Type": "AWS::IAM::Role"
+        },
+        "CodeBuild": {
+            "Properties": {
+                "Artifacts": {
+                    "Name": "output",
+                    "Type": "CODEPIPELINE"
+                },
+                "Environment": {
+                    "ComputeType": "BUILD_GENERAL1_SMALL",
+                    "EnvironmentVariables": [
+                        {
+                            "Name": "REPOSITORY_NAME",
+                            "Value": {
+                                "Fn::Select": [
+                                    0,
+                                    {
+                                        "Fn::Split": [
+                                            "-",
+                                            {
+                                                "Ref": "AWS::StackName"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "Name": "REPOSITORY_URI",
+                            "Value": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        {
+                                            "Ref": "AWS::AccountId"
+                                        },
+                                        ".dkr.ecr.",
+                                        {
+                                            "Ref": "AWS::Region"
+                                        },
+                                        ".amazonaws.com",
+                                        "/",
+                                        {
+                                            "Fn::Select": [
+                                                0,
+                                                {
+                                                    "Fn::Split": [
+                                                        "-",
+                                                        {
+                                                            "Ref": "AWS::StackName"
+                                                        }
+                                                    ]
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                ]
+                            }
+                        }
+                    ],
+                    "Image": "aws/codebuild/docker:1.12.1",
+                    "Type": "LINUX_CONTAINER"
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            {
+                                "Fn::Select": [
+                                    0,
+                                    {
+                                        "Fn::Split": [
+                                            "-",
+                                            {
+                                                "Ref": "AWS::StackName"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            "codebuild"
+                        ]
+                    ]
+                },
+                "ServiceRole": {
+                    "Ref": "ServiceRole"
+                },
+                "Source": {
+                    "BuildSpec": "version: 0.1\nphases:\n  pre_build:\n    commands:\n      - aws codepipeline get-pipeline-state --name \"${CODEBUILD_INITIATOR##*/}\" --query stageStates[?actionStates[0].latestExecution.externalExecutionId==\\`$CODEBUILD_BUILD_ID\\`].latestExecution.pipelineExecutionId --output=text > /tmp/execution_id.txt\n      - aws codepipeline get-pipeline-execution --pipeline-name \"${CODEBUILD_INITIATOR##*/}\" --pipeline-execution-id $(cat /tmp/execution_id.txt) --query 'pipelineExecution.artifactRevisions[0].revisionId' --output=text > /tmp/tag.txt\n      - printf \"%s:%s\" \"$REPOSITORY_URI\" \"$(cat /tmp/tag.txt)\" > /tmp/build_tag.txt\n      - printf '{\"tag\":\"%s\"}' \"$(cat /tmp/tag.txt)\" > /tmp/build.json\n      - $(aws ecr get-login --no-include-email)\n  build:\n    commands:\n      - docker build -t \"$(cat /tmp/build_tag.txt)\" .\n  post_build:\n    commands:\n      - echo \"$(cat /tmp/execution_id.txt)\"\n      - echo \"$(cat /tmp/tag.txt)\"\n      - echo \"$(cat /tmp/build_tag.txt)\"\n      - echo \"$(cat /tmp/build.json)\"\n      - docker push \"$(cat /tmp/build_tag.txt)\"\n      - aws ecr batch-get-image --repository-name $REPOSITORY_NAME --image-ids imageTag=\"$(cat /tmp/tag.txt)\" --query 'images[].imageManifest' --output text | tee /tmp/latest_manifest.json\n      - aws ecr put-image --repository-name $REPOSITORY_NAME --image-tag latest --image-manifest \"$(cat /tmp/latest_manifest.json)\"\nartifacts:\n  files: /tmp/build.json\n  discard-paths: yes\n",
+                    "Type": "CODEPIPELINE"
+                }
+            },
+            "Type": "AWS::CodeBuild::Project"
+        },
+        "ECSCICDPipeline": {
+            "Properties": {
+                "ArtifactStore": {
+                    "Location": {
+                        "Ref": "S3Bucket"
+                    },
+                    "Type": "S3"
+                },
+                "RoleArn": {
+                    "Fn::GetAtt": [
+                        "PipelineRole",
+                        "Arn"
+                    ]
+                },
+                "Stages": [
+                    {
+                        "Actions": [
+                            {
+                                "ActionTypeId": {
+                                    "Category": "Source",
+                                    "Owner": "AWS",
+                                    "Provider": "CodeCommit",
+                                    "Version": "1"
+                                },
+                                "Configuration": {
+                                    "BranchName": "master",
+                                    "RepositoryName": {
+                                        "Ref": "RepoName"
+                                    }
+                                },
+                                "Name": "Source",
+                                "OutputArtifacts": [
+                                    {
+                                        "Name": "App"
+                                    }
+                                ]
+                            }
+                        ],
+                        "Name": "Source"
+                    },
+                    {
+                        "Actions": [
+                            {
+                                "ActionTypeId": {
+                                    "Category": "Build",
+                                    "Owner": "AWS",
+                                    "Provider": "CodeBuild",
+                                    "Version": "1"
+                                },
+                                "Configuration": {
+                                    "ProjectName": {
+                                        "Fn::Join": [
+                                            "-",
+                                            [
+                                                {
+                                                    "Fn::Select": [
+                                                        0,
+                                                        {
+                                                            "Fn::Split": [
+                                                                "-",
+                                                                {
+                                                                    "Ref": "AWS::StackName"
+                                                                }
+                                                            ]
+                                                        }
+                                                    ]
+                                                },
+                                                "codebuild"
+                                            ]
+                                        ]
+                                    }
+                                },
+                                "InputArtifacts": [
+                                    {
+                                        "Name": "App"
+                                    }
+                                ],
+                                "Name": "Container",
+                                "OutputArtifacts": [
+                                    {
+                                        "Name": "BuildOutput"
+                                    }
+                                ]
+                            }
+                        ],
+                        "Name": "Build"
+                    },
+                    {
+                        "Actions": [
+                            {
+                                "ActionTypeId": {
+                                    "Category": "Deploy",
+                                    "Owner": "AWS",
+                                    "Provider": "CloudFormation",
+                                    "Version": "1"
+                                },
+                                "Configuration": {
+                                    "ActionMode": "CREATE_UPDATE",
+                                    "Capabilities": "CAPABILITY_NAMED_IAM",
+                                    "ChangeSetName": "Deploy",
+                                    "ParameterOverrides": "{\"Tag\" : { \"Fn::GetParam\" : [ \"BuildOutput\", \"build.json\", \"tag\" ] } }",
+                                    "RoleArn": {
+                                        "Fn::GetAtt": [
+                                            "CloudFormationECSRole",
+                                            "Arn"
+                                        ]
+                                    },
+                                    "StackName": {
+                                        "Fn::Join": [
+                                            "-",
+                                            [
+                                                "stag",
+                                                {
+                                                    "Fn::Select": [
+                                                        0,
+                                                        {
+                                                            "Fn::Split": [
+                                                                "-",
+                                                                {
+                                                                    "Ref": "AWS::StackName"
+                                                                }
+                                                            ]
+                                                        }
+                                                    ]
+                                                },
+                                                "service"
+                                            ]
+                                        ]
+                                    },
+                                    "TemplatePath": "App::templates/ecs-service-cf.template"
+                                },
+                                "InputArtifacts": [
+                                    {
+                                        "Name": "App"
+                                    },
+                                    {
+                                        "Name": "BuildOutput"
+                                    }
+                                ],
+                                "Name": "Deploy"
+                            }
+                        ],
+                        "Name": "Staging"
+                    },
+                    {
+                        "Actions": [
+                            {
+                                "ActionTypeId": {
+                                    "Category": "Approval",
+                                    "Owner": "AWS",
+                                    "Provider": "Manual",
+                                    "Version": "1"
+                                },
+                                "Configuration": {},
+                                "InputArtifacts": [],
+                                "Name": "Approval"
+                            }
+                        ],
+                        "Name": "Approval"
+                    },
+                    {
+                        "Actions": [
+                            {
+                                "ActionTypeId": {
+                                    "Category": "Deploy",
+                                    "Owner": "AWS",
+                                    "Provider": "CloudFormation",
+                                    "Version": "1"
+                                },
+                                "Configuration": {
+                                    "ActionMode": "CREATE_UPDATE",
+                                    "Capabilities": "CAPABILITY_NAMED_IAM",
+                                    "ChangeSetName": "Deploy",
+                                    "ParameterOverrides": "{\"Tag\" : { \"Fn::GetParam\" : [ \"BuildOutput\", \"build.json\", \"tag\" ] } }",
+                                    "RoleArn": {
+                                        "Fn::GetAtt": [
+                                            "CloudFormationECSRole",
+                                            "Arn"
+                                        ]
+                                    },
+                                    "StackName": {
+                                        "Fn::Join": [
+                                            "-",
+                                            [
+                                                "prod",
+                                                {
+                                                    "Fn::Select": [
+                                                        0,
+                                                        {
+                                                            "Fn::Split": [
+                                                                "-",
+                                                                {
+                                                                    "Ref": "AWS::StackName"
+                                                                }
+                                                            ]
+                                                        }
+                                                    ]
+                                                },
+                                                "service"
+                                            ]
+                                        ]
+                                    },
+                                    "TemplatePath": "App::templates/ecs-service-cf.template"
+                                },
+                                "InputArtifacts": [
+                                    {
+                                        "Name": "App"
+                                    },
+                                    {
+                                        "Name": "BuildOutput"
+                                    }
+                                ],
+                                "Name": "Deploy"
+                            }
+                        ],
+                        "Name": "Production"
+                    }
+                ]
+            },
+            "Type": "AWS::CodePipeline::Pipeline"
+        },
+        "PipelineRole": {
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "sts:AssumeRole"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "codepipeline.amazonaws.com"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyDocument": {
+                            "Statement": [
+                                {
+                                    "Action": "cloudformation:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "codebuild:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "codepipeline:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "ecr:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "ecs:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "iam:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "s3:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "codecommit:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                }
+                            ]
+                        },
+                        "PolicyName": "ECSCodePipeline"
+                    }
+                ]
+            },
+            "Type": "AWS::IAM::Role"
+        },
+        "Repository": {
+            "Properties": {
+                "RepositoryName": {
+                    "Fn::Select": [
+                        0,
+                        {
+                            "Fn::Split": [
+                                "-",
+                                {
+                                    "Ref": "AWS::StackName"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            },
+            "Type": "AWS::ECR::Repository"
+        },
+        "S3Bucket": {
+            "Properties": {
+                "VersioningConfiguration": {
+                    "Status": "Enabled"
+                }
+            },
+            "Type": "AWS::S3::Bucket"
+        },
+        "ServiceRole": {
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "sts:AssumeRole"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "codebuild.amazonaws.com"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/AWSCodePipelineReadOnlyAccess",
+                    "arn:aws:iam::aws:policy/AWSCodeBuildDeveloperAccess",
+                    "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser",
+                    "arn:aws:iam::aws:policy/AmazonS3FullAccess",
+                    "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
+                ],
+                "Path": "/"
+            },
+            "Type": "AWS::IAM::Role"
+        }
+    }
+}

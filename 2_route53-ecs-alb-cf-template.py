@@ -30,7 +30,7 @@ to multiple services on an ECS cluster.
 """
 
 # Define a list of services, in order of priority, to be routed by the ALB:
-services = ["helloworld", "goodbyeworld"]
+services = ["helloworld", "goodbyeworld", "nicksapp", "newapp"]
 Environments = ["stag", "prod"]
 
 

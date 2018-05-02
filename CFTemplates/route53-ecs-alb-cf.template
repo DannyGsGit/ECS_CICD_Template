@@ -70,6 +70,62 @@
                 ]
             }
         },
+        "prodnewappTargetGroup": {
+            "Description": "Target group for prod newapp",
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "prod-newapp-tg"
+                }
+            },
+            "Value": {
+                "Ref": "prodnewappTargetGroup"
+            }
+        },
+        "prodnewappURL": {
+            "Description": "Loadbalancer URL for newapp in prod",
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        "http://",
+                        "newapp",
+                        ".",
+                        "",
+                        {
+                            "Ref": "DomainName"
+                        }
+                    ]
+                ]
+            }
+        },
+        "prodnicksappTargetGroup": {
+            "Description": "Target group for prod nicksapp",
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "prod-nicksapp-tg"
+                }
+            },
+            "Value": {
+                "Ref": "prodnicksappTargetGroup"
+            }
+        },
+        "prodnicksappURL": {
+            "Description": "Loadbalancer URL for nicksapp in prod",
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        "http://",
+                        "nicksapp",
+                        ".",
+                        "",
+                        {
+                            "Ref": "DomainName"
+                        }
+                    ]
+                ]
+            }
+        },
         "staggoodbyeworldTargetGroup": {
             "Description": "Target group for stag goodbyeworld",
             "Export": {
@@ -117,6 +173,62 @@
                     [
                         "http://",
                         "helloworld",
+                        ".",
+                        "stag.",
+                        {
+                            "Ref": "DomainName"
+                        }
+                    ]
+                ]
+            }
+        },
+        "stagnewappTargetGroup": {
+            "Description": "Target group for stag newapp",
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "stag-newapp-tg"
+                }
+            },
+            "Value": {
+                "Ref": "stagnewappTargetGroup"
+            }
+        },
+        "stagnewappURL": {
+            "Description": "Loadbalancer URL for newapp in stag",
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        "http://",
+                        "newapp",
+                        ".",
+                        "stag.",
+                        {
+                            "Ref": "DomainName"
+                        }
+                    ]
+                ]
+            }
+        },
+        "stagnicksappTargetGroup": {
+            "Description": "Target group for stag nicksapp",
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "stag-nicksapp-tg"
+                }
+            },
+            "Value": {
+                "Ref": "stagnicksappTargetGroup"
+            }
+        },
+        "stagnicksappURL": {
+            "Description": "Loadbalancer URL for nicksapp in stag",
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        "http://",
+                        "nicksapp",
                         ".",
                         "stag.",
                         {
@@ -451,6 +563,252 @@
             },
             "Type": "AWS::ElasticLoadBalancingV2::TargetGroup"
         },
+        "prodnewappDNSRecord": {
+            "Properties": {
+                "AliasTarget": {
+                    "DNSName": {
+                        "Fn::GetAtt": [
+                            "prodLoadBalancer",
+                            "DNSName"
+                        ]
+                    },
+                    "HostedZoneId": {
+                        "Fn::FindInMap": [
+                            "RegionZIDMap",
+                            {
+                                "Ref": "AWS::Region"
+                            },
+                            "ZoneID"
+                        ]
+                    }
+                },
+                "HostedZoneName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            {
+                                "Ref": "DomainName"
+                            },
+                            "."
+                        ]
+                    ]
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            "newapp",
+                            ".",
+                            "",
+                            {
+                                "Ref": "DomainName"
+                            },
+                            "."
+                        ]
+                    ]
+                },
+                "Type": "A"
+            },
+            "Type": "AWS::Route53::RecordSet"
+        },
+        "prodnewappListenerRule": {
+            "Properties": {
+                "Actions": [
+                    {
+                        "TargetGroupArn": {
+                            "Ref": "prodnewappTargetGroup"
+                        },
+                        "Type": "forward"
+                    }
+                ],
+                "Conditions": [
+                    {
+                        "Field": "host-header",
+                        "Values": [
+                            {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "newapp",
+                                        ".",
+                                        "",
+                                        {
+                                            "Ref": "DomainName"
+                                        }
+                                    ]
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "ListenerArn": {
+                    "Ref": "prodListener"
+                },
+                "Priority": 4
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::ListenerRule"
+        },
+        "prodnewappTargetGroup": {
+            "DependsOn": "prodLoadBalancer",
+            "Properties": {
+                "HealthCheckIntervalSeconds": "20",
+                "HealthCheckPath": "/newapp",
+                "HealthCheckProtocol": "HTTP",
+                "HealthCheckTimeoutSeconds": "15",
+                "HealthyThresholdCount": "5",
+                "Matcher": {
+                    "HttpCode": "200"
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "prod",
+                            "newapp",
+                            "TG"
+                        ]
+                    ]
+                },
+                "Port": 3000,
+                "Protocol": "HTTP",
+                "UnhealthyThresholdCount": "3",
+                "VpcId": {
+                    "Fn::ImportValue": {
+                        "Fn::Join": [
+                            "-",
+                            [
+                                "prod",
+                                "cluster-vpc-id"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::TargetGroup"
+        },
+        "prodnicksappDNSRecord": {
+            "Properties": {
+                "AliasTarget": {
+                    "DNSName": {
+                        "Fn::GetAtt": [
+                            "prodLoadBalancer",
+                            "DNSName"
+                        ]
+                    },
+                    "HostedZoneId": {
+                        "Fn::FindInMap": [
+                            "RegionZIDMap",
+                            {
+                                "Ref": "AWS::Region"
+                            },
+                            "ZoneID"
+                        ]
+                    }
+                },
+                "HostedZoneName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            {
+                                "Ref": "DomainName"
+                            },
+                            "."
+                        ]
+                    ]
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            "nicksapp",
+                            ".",
+                            "",
+                            {
+                                "Ref": "DomainName"
+                            },
+                            "."
+                        ]
+                    ]
+                },
+                "Type": "A"
+            },
+            "Type": "AWS::Route53::RecordSet"
+        },
+        "prodnicksappListenerRule": {
+            "Properties": {
+                "Actions": [
+                    {
+                        "TargetGroupArn": {
+                            "Ref": "prodnicksappTargetGroup"
+                        },
+                        "Type": "forward"
+                    }
+                ],
+                "Conditions": [
+                    {
+                        "Field": "host-header",
+                        "Values": [
+                            {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "nicksapp",
+                                        ".",
+                                        "",
+                                        {
+                                            "Ref": "DomainName"
+                                        }
+                                    ]
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "ListenerArn": {
+                    "Ref": "prodListener"
+                },
+                "Priority": 3
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::ListenerRule"
+        },
+        "prodnicksappTargetGroup": {
+            "DependsOn": "prodLoadBalancer",
+            "Properties": {
+                "HealthCheckIntervalSeconds": "20",
+                "HealthCheckPath": "/nicksapp",
+                "HealthCheckProtocol": "HTTP",
+                "HealthCheckTimeoutSeconds": "15",
+                "HealthyThresholdCount": "5",
+                "Matcher": {
+                    "HttpCode": "200"
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "prod",
+                            "nicksapp",
+                            "TG"
+                        ]
+                    ]
+                },
+                "Port": 3000,
+                "Protocol": "HTTP",
+                "UnhealthyThresholdCount": "3",
+                "VpcId": {
+                    "Fn::ImportValue": {
+                        "Fn::Join": [
+                            "-",
+                            [
+                                "prod",
+                                "cluster-vpc-id"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::TargetGroup"
+        },
         "stagELBSecurityGroup": {
             "Properties": {
                 "GroupDescription": "Web load balancer security group.",
@@ -746,6 +1104,252 @@
                         [
                             "stag",
                             "helloworld",
+                            "TG"
+                        ]
+                    ]
+                },
+                "Port": 3000,
+                "Protocol": "HTTP",
+                "UnhealthyThresholdCount": "3",
+                "VpcId": {
+                    "Fn::ImportValue": {
+                        "Fn::Join": [
+                            "-",
+                            [
+                                "stag",
+                                "cluster-vpc-id"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::TargetGroup"
+        },
+        "stagnewappDNSRecord": {
+            "Properties": {
+                "AliasTarget": {
+                    "DNSName": {
+                        "Fn::GetAtt": [
+                            "stagLoadBalancer",
+                            "DNSName"
+                        ]
+                    },
+                    "HostedZoneId": {
+                        "Fn::FindInMap": [
+                            "RegionZIDMap",
+                            {
+                                "Ref": "AWS::Region"
+                            },
+                            "ZoneID"
+                        ]
+                    }
+                },
+                "HostedZoneName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            {
+                                "Ref": "DomainName"
+                            },
+                            "."
+                        ]
+                    ]
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            "newapp",
+                            ".",
+                            "stag.",
+                            {
+                                "Ref": "DomainName"
+                            },
+                            "."
+                        ]
+                    ]
+                },
+                "Type": "A"
+            },
+            "Type": "AWS::Route53::RecordSet"
+        },
+        "stagnewappListenerRule": {
+            "Properties": {
+                "Actions": [
+                    {
+                        "TargetGroupArn": {
+                            "Ref": "stagnewappTargetGroup"
+                        },
+                        "Type": "forward"
+                    }
+                ],
+                "Conditions": [
+                    {
+                        "Field": "host-header",
+                        "Values": [
+                            {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "newapp",
+                                        ".",
+                                        "stag.",
+                                        {
+                                            "Ref": "DomainName"
+                                        }
+                                    ]
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "ListenerArn": {
+                    "Ref": "stagListener"
+                },
+                "Priority": 4
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::ListenerRule"
+        },
+        "stagnewappTargetGroup": {
+            "DependsOn": "stagLoadBalancer",
+            "Properties": {
+                "HealthCheckIntervalSeconds": "20",
+                "HealthCheckPath": "/newapp",
+                "HealthCheckProtocol": "HTTP",
+                "HealthCheckTimeoutSeconds": "15",
+                "HealthyThresholdCount": "5",
+                "Matcher": {
+                    "HttpCode": "200"
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "stag",
+                            "newapp",
+                            "TG"
+                        ]
+                    ]
+                },
+                "Port": 3000,
+                "Protocol": "HTTP",
+                "UnhealthyThresholdCount": "3",
+                "VpcId": {
+                    "Fn::ImportValue": {
+                        "Fn::Join": [
+                            "-",
+                            [
+                                "stag",
+                                "cluster-vpc-id"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::TargetGroup"
+        },
+        "stagnicksappDNSRecord": {
+            "Properties": {
+                "AliasTarget": {
+                    "DNSName": {
+                        "Fn::GetAtt": [
+                            "stagLoadBalancer",
+                            "DNSName"
+                        ]
+                    },
+                    "HostedZoneId": {
+                        "Fn::FindInMap": [
+                            "RegionZIDMap",
+                            {
+                                "Ref": "AWS::Region"
+                            },
+                            "ZoneID"
+                        ]
+                    }
+                },
+                "HostedZoneName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            {
+                                "Ref": "DomainName"
+                            },
+                            "."
+                        ]
+                    ]
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            "nicksapp",
+                            ".",
+                            "stag.",
+                            {
+                                "Ref": "DomainName"
+                            },
+                            "."
+                        ]
+                    ]
+                },
+                "Type": "A"
+            },
+            "Type": "AWS::Route53::RecordSet"
+        },
+        "stagnicksappListenerRule": {
+            "Properties": {
+                "Actions": [
+                    {
+                        "TargetGroupArn": {
+                            "Ref": "stagnicksappTargetGroup"
+                        },
+                        "Type": "forward"
+                    }
+                ],
+                "Conditions": [
+                    {
+                        "Field": "host-header",
+                        "Values": [
+                            {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "nicksapp",
+                                        ".",
+                                        "stag.",
+                                        {
+                                            "Ref": "DomainName"
+                                        }
+                                    ]
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "ListenerArn": {
+                    "Ref": "stagListener"
+                },
+                "Priority": 3
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::ListenerRule"
+        },
+        "stagnicksappTargetGroup": {
+            "DependsOn": "stagLoadBalancer",
+            "Properties": {
+                "HealthCheckIntervalSeconds": "20",
+                "HealthCheckPath": "/nicksapp",
+                "HealthCheckProtocol": "HTTP",
+                "HealthCheckTimeoutSeconds": "15",
+                "HealthyThresholdCount": "5",
+                "Matcher": {
+                    "HttpCode": "200"
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "stag",
+                            "nicksapp",
                             "TG"
                         ]
                     ]
