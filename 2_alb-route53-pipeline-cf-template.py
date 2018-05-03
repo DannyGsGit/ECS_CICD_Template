@@ -120,31 +120,7 @@ environment = Environment(
 
 
 
-# buildspec = """version: 0.1
-# phases:
-#   pre_build:
-#     commands:
-#       - aws codepipeline get-pipeline-state --name "${CODEBUILD_INITIATOR##*/}" --query stageStates[?actionStates[0].latestExecution.externalExecutionId==\`$CODEBUILD_BUILD_ID\`].latestExecution.pipelineExecutionId --output=text > /tmp/execution_id.txt
-#       - aws codepipeline get-pipeline-execution --pipeline-name "${CODEBUILD_INITIATOR##*/}" --pipeline-execution-id $(cat /tmp/execution_id.txt) --query 'pipelineExecution.artifactRevisions[0].revisionId' --output=text > /tmp/tag.txt
-#       - printf "%s:%s" "$REPOSITORY_URI" "$(cat /tmp/tag.txt)" > /tmp/build_tag.txt
-#       - printf '{"tag":"%s"}' "$(cat /tmp/tag.txt)" > /tmp/build.json
-#       - $(aws ecr get-login --no-include-email)
-#   build:
-#     commands:
-#       - docker build -t "$(cat /tmp/build_tag.txt)" .
-#   post_build:
-#     commands:
-#       - echo "$(cat /tmp/execution_id.txt)"
-#       - echo "$(cat /tmp/tag.txt)"
-#       - echo "$(cat /tmp/build_tag.txt)"
-#       - echo "$(cat /tmp/build.json)"
-#       - docker push "$(cat /tmp/build_tag.txt)"
-#       - aws ecr batch-get-image --repository-name $REPOSITORY_NAME --image-ids imageTag="$(cat /tmp/tag.txt)" --query 'images[].imageManifest' --output text | tee /tmp/latest_manifest.json
-#       - aws ecr put-image --repository-name $REPOSITORY_NAME --image-tag latest --image-manifest "$(cat /tmp/latest_manifest.json)"
-# artifacts:
-#   files: /tmp/build.json
-#   discard-paths: yes
-# """
+
 
 buildspec = """version: 0.1
 phases:
@@ -341,7 +317,7 @@ t.add_resource(Pipeline(
                     Configuration={
                         "ChangeSetName": "Deploy",
                         "ActionMode": "CREATE_UPDATE",
-                        "StackName": "ALB-Route53-Resources",
+                        "StackName": "alb-route53-resources",
                         "Capabilities": "CAPABILITY_NAMED_IAM",
                         "TemplatePath": "BuildOutput::alb-route53-cf.template",
                         "RoleArn": GetAtt("CloudFormationNetworkRole", "Arn")

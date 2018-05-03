@@ -1,6 +1,8 @@
 """Generating CloudFormation template."""
 """ Stack name must be of format staging-appname-service"""
 
+import yaml
+
 from troposphere.ecs import (
     TaskDefinition,
     ContainerDefinition
@@ -28,6 +30,14 @@ from troposphere import (
 
 from awacs.sts import AssumeRole
 
+
+# Get configuration from YAML
+with open('service_config.yaml', 'r') as f:
+    doc = yaml.load(f)
+TaskCPU = doc['TaskCPU']
+TaskMemory = doc['TaskMemory']
+
+
 t = Template()
 
 t.add_description("ECS service")
@@ -40,6 +50,19 @@ t.add_parameter(Parameter(
     Description="Tag to deploy"
 ))
 
+# t.add_parameter(Parameter(
+#     "TaskCPU",
+#     Type="Number",
+#     Default=256,
+#     Description="Task CPU Allocation (1024 = 1 core)"
+# ))
+#
+# t.add_parameter(Parameter(
+#     "TaskMemory",
+#     Type="Number",
+#     Default=32,
+#     Description="Task Memory Allocation (MiB)"
+# ))
 
 
 # First, we define an ECS task
@@ -57,8 +80,8 @@ t.add_resource(TaskDefinition(
                 Select(1, Split("-", Ref("AWS::StackName"))),
                 ":",
                 Ref("Tag")]),
-            Memory=32,
-            Cpu=256,
+            Memory=TaskMemory,
+            Cpu=TaskCPU,
             Name=Select(1, Split("-", Ref("AWS::StackName"))),
             PortMappings=[ecs.PortMapping(
                 ContainerPort=3000)]

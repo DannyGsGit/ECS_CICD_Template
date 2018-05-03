@@ -28,13 +28,13 @@ It is recommended to name the stack with format **appname-codepipeline**, and li
 - [x] Update ALB template for host-based routing connected to Route53
 - [x] Shorten prod/staging names
 - [x] Clean up ELB/Domain work
+- [x] Lock down security group on Route53/ALB
+- [x] CodePipeline for all infrastructure
 
-- [ ] Lock down security group on Route53/ALB
-- [ ] CodePipeline for all infrastructure
+- [ ] Scaling rules for containers (https://github.com/cloudtools/troposphere/blob/master/examples/ApplicationAutoScalingSample.py)
+
+- [ ] Move resources into private subnets of VPC
 - [ ] Cloudwatch logging
 - [ ] Get CloudWatch dashboards coded
-- [ ] Move resources into private subnets of VPC
 - [ ] Lock down IAM permissions
-- [ ] Scaling rules for containers
 - [ ] Template for scheduled tasks
-- [ ] Get Scout2 working properly

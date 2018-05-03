@@ -1,5 +1,10 @@
 """Generating CloudFormation template."""
 
+
+"""This template deploys ALBs, Target Groups and Route53 configuration in a
+CodePipeline. The template picks up the list of services from a YAML stored in
+a target CodeCommit repo."""
+
 from awacs.aws import (
     Allow,
     Policy,
@@ -14,6 +19,7 @@ from awacs.sts import AssumeRole
 from troposphere import (
     Join,
     Ref,
+    Sub,
     Template,
     Parameter,
     Select,
@@ -40,30 +46,37 @@ from troposphere.codepipeline import (
     Stages
 )
 
-from troposphere.iam import Role
-
 from troposphere.iam import Policy as IAMPolicy
 
 from troposphere.s3 import Bucket, VersioningConfiguration
 
+from troposphere.autoscaling import (
+    AutoScalingGroup,
+    LaunchConfiguration,
+    ScalingPolicy
+)
 
-"""
-This template consolidates the following components:
-* 3-ECR creation
-* 4-Codebuild
-* 6-Codepipeline
+from troposphere.cloudwatch import (
+    Alarm,
+    MetricDimension
+)
 
-The template assumes that a compatible ECS service definition
-template (step 5) is included in the ./templates path of the
-Git repo to be deployed.
+from troposphere.ecs import Cluster
 
-For good naming practice, the stack name should be of format:
-appname-codepipeline
-"""
+from troposphere.iam import (
+    InstanceProfile,
+    Role
+)
+
+
+
+
+
+
 
 t = Template()
 
-t.add_description("New Service CICD Pipeline")
+t.add_description("ALB and Route53 Pipeline")
 
 
 ##############
@@ -73,43 +86,44 @@ t.add_description("New Service CICD Pipeline")
 t.add_parameter(Parameter(
     "RepoName",
     Type="String",
-    Description="Name of the CodeCommit repository to source"
+    Description="CodeCommit Repo containing ECS template"
 ))
 
-# t.add_parameter(Parameter(
-#     "TaskCPU",
-#     Type="Number",
-#     Default=256,
-#     Description="Task CPU Allocation (1024 = 1 core)"
-# ))
-#
-# t.add_parameter(Parameter(
-#     "TaskMemory",
-#     Type="Number",
-#     Default=32,
-#     Description="Task Memory Allocation (MiB)"
-# ))
+t.add_parameter(Parameter(
+    "StageVpcId",
+    Type="AWS::EC2::VPC::Id",
+    Description="Staging VPC (format: vpc-263e8d41)"
+))
 
+t.add_parameter(Parameter(
+    "StagePublicSubnet",
+    Description="Staging PublicSubnet (format: subnet-2480c343,subnet-7a8a1621)",
+    Type="List<AWS::EC2::Subnet::Id>"
+))
+
+t.add_parameter(Parameter(
+    "ProdVpcId",
+    Type="AWS::EC2::VPC::Id",
+    Description="Prod VPC"
+))
+
+t.add_parameter(Parameter(
+    "ProdPublicSubnet",
+    Description="Prod PublicSubnet",
+    Type="List<AWS::EC2::Subnet::Id>"
+))
+
+t.add_parameter(Parameter(
+    "KeyPair",
+    Description="Name of an existing EC2 KeyPair to SSH",
+    Type="AWS::EC2::KeyPair::KeyName",
+    ConstraintDescription="must be the name of an existing EC2 KeyPair.",
+))
 
 #############
 # Resources #
 #############
 
-
-### ECR ####
-# Create the resource
-t.add_resource(Repository(
-    "Repository",
-    RepositoryName=Select(0, Split("-", Ref("AWS::StackName")))
-))
-
-# Define the stack output
-t.add_output(Output(
-    "Repository",
-    Description="ECR repository",
-    Value=Select(0, Split("-", Ref("AWS::StackName"))),
-    Export=Export(Join("-", [Ref("RepoName"), "repo"])),
-))
 
 
 
@@ -136,127 +150,69 @@ t.add_resource(Role(
     ]
 ))
 
-
-
-
-
-
-# Cloudformation Codebuild Definition
-environment_cfn = Environment(
+environment = Environment(
     ComputeType='BUILD_GENERAL1_SMALL',
-    Image='aws/codebuild/docker:1.12.1',
-    Type='LINUX_CONTAINER',
-    EnvironmentVariables=[],
-)
-
-
-
-buildspec_cfn = """version: 0.1
-phases:
-  pre_build:
-    commands:
-      - pip install troposphere
-      - pip install pyyaml
-      - pip install awacs
-  build:
-    commands:
-      - echo "Starting python execution"
-      - python ecs-service-cf-template.py > /tmp/ecs-service-cf.template
-  post_build:
-    commands:
-      - echo "Completed CFN template creation."
-artifacts:
-  files: /tmp/ecs-service-cf.template
-  discard-paths: yes
-"""
-
-t.add_resource(Project(
-    "CodeBuildCFN",
-    Name=Join(
-            "-",
-            [Select(0, Split("-", Ref("AWS::StackName"))),
-            "cfn",
-            "codebuild"]
-        ),
-    Environment=environment_cfn,
-    ServiceRole=Ref("ServiceRole"),
-    Source=Source(
-        Type="CODEPIPELINE",
-        BuildSpec=buildspec_cfn
-    ),
-    Artifacts=Artifacts(
-        Type="CODEPIPELINE",
-        Name="output"
-    ),
-))
-
-
-
-# Docker Codebuild Definition
-environment_docker = Environment(
-    ComputeType='BUILD_GENERAL1_SMALL',
-    Image='aws/codebuild/docker:1.12.1',
+    Image='aws/codebuild/python:3.5.2',
     Type='LINUX_CONTAINER',
     EnvironmentVariables=[
-        {'Name': 'REPOSITORY_NAME', 'Value': Select(0, Split("-", Ref("AWS::StackName")))},
-        {'Name': 'REPOSITORY_URI',
-            'Value': Join("", [
-                Ref("AWS::AccountId"),
-                ".dkr.ecr.",
-                Ref("AWS::Region"),
-                ".amazonaws.com",
-                "/",
-                Select(0, Split("-", Ref("AWS::StackName")))])}
+        {'Name': 'StageVpcId', 'Value': Ref("StageVpcId")},
+        {'Name': 'StagePublicSubnet', 'Value': Join(',', Ref("StagePublicSubnet"))},
+        {'Name': 'ProdVpcId', 'Value': Ref("ProdVpcId")},
+        {'Name': 'ProdPublicSubnet', 'Value': Join(',', Ref("StagePublicSubnet"))},
+        {'Name': 'KeyPair', 'Value': Ref("KeyPair")}
     ],
 )
 
 
 
-buildspec_docker = """version: 0.1
+
+
+buildspec = """version: 0.1
 phases:
   pre_build:
     commands:
-      - aws codepipeline get-pipeline-state --name "${CODEBUILD_INITIATOR##*/}" --query stageStates[?actionStates[0].latestExecution.externalExecutionId==\`$CODEBUILD_BUILD_ID\`].latestExecution.pipelineExecutionId --output=text > /tmp/execution_id.txt
-      - aws codepipeline get-pipeline-execution --pipeline-name "${CODEBUILD_INITIATOR##*/}" --pipeline-execution-id $(cat /tmp/execution_id.txt) --query 'pipelineExecution.artifactRevisions[0].revisionId' --output=text > /tmp/tag.txt
-      - printf "%s:%s" "$REPOSITORY_URI" "$(cat /tmp/tag.txt)" > /tmp/build_tag.txt
-      - printf '{"tag":"%s"}' "$(cat /tmp/tag.txt)" > /tmp/build.json
-      - $(aws ecr get-login --no-include-email)
+      - pip install troposphere
+      - pip install pyyaml
   build:
     commands:
-      - docker build -t "$(cat /tmp/build_tag.txt)" .
+      - echo "Starting python execution"
+      - python ecs-cluster-cf-template.py > /tmp/ecs-cluster-cf.template
+      - printf '{"StageVpcId":"%s"}' "$StageVpcId" > /tmp/StageVpcId.json
+      - printf '{"StagePublicSubnet":"%s"}' "$StagePublicSubnet" > /tmp/StagePublicSubnet.json
+      - printf '{"ProdVpcId":"%s"}' "$ProdVpcId" > /tmp/ProdVpcId.json
+      - printf '{"ProdPublicSubnet":"%s"}' "$ProdPublicSubnet" > /tmp/ProdPublicSubnet.json
+      - printf '{"KeyPair":"%s"}' "$KeyPair" > /tmp/KeyPair.json
   post_build:
     commands:
-      - echo "$(cat /tmp/execution_id.txt)"
-      - echo "$(cat /tmp/tag.txt)"
-      - echo "$(cat /tmp/build_tag.txt)"
-      - echo "$(cat /tmp/build.json)"
-      - docker push "$(cat /tmp/build_tag.txt)"
-      - aws ecr batch-get-image --repository-name $REPOSITORY_NAME --image-ids imageTag="$(cat /tmp/tag.txt)" --query 'images[].imageManifest' --output text | tee /tmp/latest_manifest.json
-      - aws ecr put-image --repository-name $REPOSITORY_NAME --image-tag latest --image-manifest "$(cat /tmp/latest_manifest.json)"
+      - echo "Completed CFN template creation."
+      - echo "$(cat /tmp/StagePublicSubnet.json)"
 artifacts:
   files: /tmp/*
   discard-paths: yes
 """
 
+
 t.add_resource(Project(
-    "CodeBuildDocker",
+    "CodeBuild",
     Name=Join(
             "-",
             [Select(0, Split("-", Ref("AWS::StackName"))),
-            "docker",
-            "codebuild"]
+                "codebuild"]
         ),
-    Environment=environment_docker,
+    Environment=environment,
     ServiceRole=Ref("ServiceRole"),
     Source=Source(
         Type="CODEPIPELINE",
-        BuildSpec=buildspec_docker
+        BuildSpec=buildspec
     ),
     Artifacts=Artifacts(
         Type="CODEPIPELINE",
         Name="output"
     ),
 ))
+
+
+
 
 
 
@@ -282,7 +238,7 @@ t.add_resource(Role(
     Path="/",
     Policies=[
         IAMPolicy(
-            PolicyName="ECSCodePipeline",
+            PolicyName="ClusterCodePipeline",
             PolicyDocument={
                 "Statement": [
                     {"Effect": "Allow", "Action": "cloudformation:*", "Resource": "*"},
@@ -300,11 +256,11 @@ t.add_resource(Role(
 ))
 
 t.add_resource(Role(
-    "CloudFormationECSRole",
+    "CloudFormationClusterRole",
     RoleName=Join(
             "-",
             [Select(0, Split("-", Ref("AWS::StackName"))),
-                "CloudFormationECSRole"]
+                "CloudFormationClusterRole"]
         ),
     Path="/",
     AssumeRolePolicyDocument=Policy(
@@ -319,17 +275,19 @@ t.add_resource(Role(
     ),
     Policies=[
         IAMPolicy(
-            PolicyName="CloudFormationECSPolicy",
+            PolicyName="CloudFormationClusterPolicy",
             PolicyDocument={
                 "Statement": [
                     {"Effect": "Allow", "Action": "cloudformation:*", "Resource": "*"},
                     {"Effect": "Allow", "Action": "ecr:*", "Resource": "*"},
                     {"Effect": "Allow", "Action": "ecs:*", "Resource": "*"},
                     {"Effect": "Allow", "Action": "iam:*", "Resource": "*"},
+                    {"Effect": "Allow", "Action": "ec2:*", "Resource": "*"},
+                    {"Effect": "Allow", "Action": "autoscaling:*", "Resource": "*"},
+                    {"Effect": "Allow", "Action": "elasticloadbalancing:*", "Resource": "*"},
+                    {"Effect": "Allow", "Action": "route53:*", "Resource": "*"},
                     {"Effect": "Allow", "Action": "codecommit:*", "Resource": "*"},
-                    {"Effect": "Allow", "Action": "application-autoscaling:*", "Resource": "*"},
-                    {"Effect": "Allow", "Action": "cloudwatch:DescribeAlarms", "Resource": "*"},
-                    {"Effect": "Allow", "Action": "cloudwatch:GetMetricStatistics", "Resource": "*"},
+                    {"Effect": "Allow", "Action": "cloudwatch:*", "Resource": "*"},
                 ],
             }
         ),
@@ -337,7 +295,7 @@ t.add_resource(Role(
 ))
 
 t.add_resource(Pipeline(
-    "ECSCICDPipeline",
+    "ClusterPipeline",
     RoleArn=GetAtt("PipelineRole", "Arn"),
     ArtifactStore=ArtifactStore(
         Type="S3",
@@ -368,7 +326,7 @@ t.add_resource(Pipeline(
             ]
         ),
         Stages(
-            Name="CFNBuild",
+            Name="Build",
             Actions=[
                 Actions(
                     Name="Container",
@@ -382,8 +340,7 @@ t.add_resource(Pipeline(
                         "ProjectName":Join(
                                 "-",
                                 [Select(0, Split("-", Ref("AWS::StackName"))),
-                                "cfn",
-                                "codebuild"]
+                                    "codebuild"]
                             ),
                     },
                     InputArtifacts=[
@@ -393,39 +350,7 @@ t.add_resource(Pipeline(
                     ],
                     OutputArtifacts=[
                         OutputArtifacts(
-                            Name="CFNBuildOutput"
-                        )
-                    ],
-                )
-            ]
-        ),
-        Stages(
-            Name="DockerBuild",
-            Actions=[
-                Actions(
-                    Name="Container",
-                    ActionTypeId=ActionTypeID(
-                        Category="Build",
-                        Owner="AWS",
-                        Version="1",
-                        Provider="CodeBuild"
-                    ),
-                    Configuration={
-                        "ProjectName":Join(
-                                "-",
-                                [Select(0, Split("-", Ref("AWS::StackName"))),
-                                "docker",
-                                "codebuild"]
-                            ),
-                    },
-                    InputArtifacts=[
-                        InputArtifacts(
-                            Name="App"
-                        )
-                    ],
-                    OutputArtifacts=[
-                        OutputArtifacts(
-                            Name="DockerBuildOutput"
+                            Name="BuildOutput"
                         )
                     ],
                 )
@@ -445,49 +370,27 @@ t.add_resource(Pipeline(
                     Configuration={
                         "ChangeSetName": "Deploy",
                         "ActionMode": "CREATE_UPDATE",
-                        "StackName": Join(
-                                "-",
-                                ["stag",
-                                Select(0, Split("-", Ref("AWS::StackName"))),
-                                "service"]
-                        ),
+                        "StackName": "stag-cluster",
                         "Capabilities": "CAPABILITY_NAMED_IAM",
-                        "TemplatePath": "CFNBuildOutput::ecs-service-cf.template",
-                        "RoleArn": GetAtt("CloudFormationECSRole", "Arn"),
-                        "ParameterOverrides": """{"Tag" : { "Fn::GetParam" : [ "DockerBuildOutput", "build.json", "tag" ] } }"""
+                        "TemplatePath": "BuildOutput::ecs-cluster-cf.template",
+                        "RoleArn": GetAtt("CloudFormationClusterRole", "Arn"),
+                        "ParameterOverrides": """{"VpcId" : { "Fn::GetParam" : [ "BuildOutput", "StageVpcId.json", "StageVpcId" ] },
+                        "PublicSubnet" : { "Fn::GetParam" : [ "BuildOutput", "StagePublicSubnet.json", "StagePublicSubnet" ] },
+                        "KeyPair" : { "Fn::GetParam" : [ "BuildOutput", "KeyPair.json", "KeyPair" ] } }"""
                     },
                     InputArtifacts=[
                         InputArtifacts(
                             Name="App",
                         ),
                         InputArtifacts(
-                            Name="CFNBuildOutput"
-                        ),
-                        InputArtifacts(
-                            Name="DockerBuildOutput"
+                            Name="BuildOutput"
                         )
                     ],
                 )
             ]
         ),
         Stages(
-            Name="Approval",
-            Actions=[
-                Actions(
-                    Name="Approval",
-                    ActionTypeId=ActionTypeID(
-                        Category="Approval",
-                        Owner="AWS",
-                        Version="1",
-                        Provider="Manual"
-                    ),
-                    Configuration={},
-                    InputArtifacts=[],
-                )
-            ]
-        ),
-        Stages(
-            Name="Production",
+            Name="Deploy",
             Actions=[
                 Actions(
                     Name="Deploy",
@@ -500,26 +403,20 @@ t.add_resource(Pipeline(
                     Configuration={
                         "ChangeSetName": "Deploy",
                         "ActionMode": "CREATE_UPDATE",
-                        "StackName": Join(
-                                "-",
-                                ["prod",
-                                Select(0, Split("-", Ref("AWS::StackName"))),
-                                "service"]
-                        ),
+                        "StackName": "prod-cluster",
                         "Capabilities": "CAPABILITY_NAMED_IAM",
-                        "TemplatePath": "CFNBuildOutput::ecs-service-cf.template",
-                        "RoleArn": GetAtt("CloudFormationECSRole", "Arn"),
-                        "ParameterOverrides": """{"Tag" : { "Fn::GetParam" : [ "DockerBuildOutput", "build.json", "tag" ] } }"""
+                        "TemplatePath": "BuildOutput::ecs-cluster-cf.template",
+                        "RoleArn": GetAtt("CloudFormationClusterRole", "Arn"),
+                        "ParameterOverrides": """{"VpcId" : { "Fn::GetParam" : [ "BuildOutput", "ProdVpcId.json", "ProdVpcId" ] } ,
+                        "PublicSubnet" : { "Fn::GetParam" : [ "BuildOutput", "ProdPublicSubnet.json", "ProdPublicSubnet" ] },
+                        "KeyPair" : { "Fn::GetParam" : [ "BuildOutput", "KeyPair.json", "KeyPair" ] } }"""
                     },
                     InputArtifacts=[
                         InputArtifacts(
                             Name="App",
                         ),
                         InputArtifacts(
-                            Name="CFNBuildOutput"
-                        ),
-                        InputArtifacts(
-                            Name="DockerBuildOutput"
+                            Name="BuildOutput"
                         )
                     ],
                 )

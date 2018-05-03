@@ -70,11 +70,41 @@ for e in Environments:
             )
         ),
         SecurityGroupIngress=[
+            # ec2.SecurityGroupRule(
+            #     IpProtocol="tcp",
+            #     FromPort="80",
+            #     ToPort="80",
+            #     CidrIp="0.0.0.0/0",
+            ec2.SecurityGroupRule(
+                IpProtocol="tcp",
+                FromPort=0,
+                ToPort=65535,
+                CidrIp="172.16.0.0/12",
+            ),
+            # Zscaler ranges
+            ec2.SecurityGroupRule(
+                IpProtocol="tcp",
+                FromPort="22",
+                ToPort="22",
+                CidrIp="165.225.50.0/23",
+            ),
+            ec2.SecurityGroupRule(
+                IpProtocol="tcp",
+                FromPort="22",
+                ToPort="22",
+                CidrIp="104.129.192.0/23",
+            ),
             ec2.SecurityGroupRule(
                 IpProtocol="tcp",
                 FromPort="80",
                 ToPort="80",
-                CidrIp="0.0.0.0/0",
+                CidrIp="165.225.50.0/23",
+            ),
+            ec2.SecurityGroupRule(
+                IpProtocol="tcp",
+                FromPort="80",
+                ToPort="80",
+                CidrIp="104.129.192.0/23",
             ),
         ],
     ))

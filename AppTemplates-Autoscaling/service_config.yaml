@@ -1,0 +1,5 @@
+TaskCPU: '256'
+TaskMemory: '32'
+DesiredTaskCapacity: '2'
+MinTaskCapacity: '2'
+MaxTaskCapacity: '10'

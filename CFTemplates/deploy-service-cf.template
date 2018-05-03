@@ -108,6 +108,21 @@
                                     "Action": "codecommit:*",
                                     "Effect": "Allow",
                                     "Resource": "*"
+                                },
+                                {
+                                    "Action": "application-autoscaling:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "cloudwatch:DescribeAlarms",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": "cloudwatch:GetMetricStatistics",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
                                 }
                             ]
                         },
@@ -138,7 +153,51 @@
             },
             "Type": "AWS::IAM::Role"
         },
-        "CodeBuild": {
+        "CodeBuildCFN": {
+            "Properties": {
+                "Artifacts": {
+                    "Name": "output",
+                    "Type": "CODEPIPELINE"
+                },
+                "Environment": {
+                    "ComputeType": "BUILD_GENERAL1_SMALL",
+                    "EnvironmentVariables": [],
+                    "Image": "aws/codebuild/docker:1.12.1",
+                    "Type": "LINUX_CONTAINER"
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            {
+                                "Fn::Select": [
+                                    0,
+                                    {
+                                        "Fn::Split": [
+                                            "-",
+                                            {
+                                                "Ref": "AWS::StackName"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            "cfn",
+                            "codebuild"
+                        ]
+                    ]
+                },
+                "ServiceRole": {
+                    "Ref": "ServiceRole"
+                },
+                "Source": {
+                    "BuildSpec": "version: 0.1\nphases:\n  pre_build:\n    commands:\n      - pip install troposphere\n      - pip install pyyaml\n      - pip install awacs\n  build:\n    commands:\n      - echo \"Starting python execution\"\n      - python ecs-service-cf-template.py > /tmp/ecs-service-cf.template\n  post_build:\n    commands:\n      - echo \"Completed CFN template creation.\"\nartifacts:\n  files: /tmp/ecs-service-cf.template\n  discard-paths: yes\n",
+                    "Type": "CODEPIPELINE"
+                }
+            },
+            "Type": "AWS::CodeBuild::Project"
+        },
+        "CodeBuildDocker": {
             "Properties": {
                 "Artifacts": {
                     "Name": "output",
@@ -216,6 +275,7 @@
                                     }
                                 ]
                             },
+                            "docker",
                             "codebuild"
                         ]
                     ]
@@ -224,7 +284,7 @@
                     "Ref": "ServiceRole"
                 },
                 "Source": {
-                    "BuildSpec": "version: 0.1\nphases:\n  pre_build:\n    commands:\n      - aws codepipeline get-pipeline-state --name \"${CODEBUILD_INITIATOR##*/}\" --query stageStates[?actionStates[0].latestExecution.externalExecutionId==\\`$CODEBUILD_BUILD_ID\\`].latestExecution.pipelineExecutionId --output=text > /tmp/execution_id.txt\n      - aws codepipeline get-pipeline-execution --pipeline-name \"${CODEBUILD_INITIATOR##*/}\" --pipeline-execution-id $(cat /tmp/execution_id.txt) --query 'pipelineExecution.artifactRevisions[0].revisionId' --output=text > /tmp/tag.txt\n      - printf \"%s:%s\" \"$REPOSITORY_URI\" \"$(cat /tmp/tag.txt)\" > /tmp/build_tag.txt\n      - printf '{\"tag\":\"%s\"}' \"$(cat /tmp/tag.txt)\" > /tmp/build.json\n      - $(aws ecr get-login --no-include-email)\n  build:\n    commands:\n      - docker build -t \"$(cat /tmp/build_tag.txt)\" .\n  post_build:\n    commands:\n      - echo \"$(cat /tmp/execution_id.txt)\"\n      - echo \"$(cat /tmp/tag.txt)\"\n      - echo \"$(cat /tmp/build_tag.txt)\"\n      - echo \"$(cat /tmp/build.json)\"\n      - docker push \"$(cat /tmp/build_tag.txt)\"\n      - aws ecr batch-get-image --repository-name $REPOSITORY_NAME --image-ids imageTag=\"$(cat /tmp/tag.txt)\" --query 'images[].imageManifest' --output text | tee /tmp/latest_manifest.json\n      - aws ecr put-image --repository-name $REPOSITORY_NAME --image-tag latest --image-manifest \"$(cat /tmp/latest_manifest.json)\"\nartifacts:\n  files: /tmp/build.json\n  discard-paths: yes\n",
+                    "BuildSpec": "version: 0.1\nphases:\n  pre_build:\n    commands:\n      - aws codepipeline get-pipeline-state --name \"${CODEBUILD_INITIATOR##*/}\" --query stageStates[?actionStates[0].latestExecution.externalExecutionId==\\`$CODEBUILD_BUILD_ID\\`].latestExecution.pipelineExecutionId --output=text > /tmp/execution_id.txt\n      - aws codepipeline get-pipeline-execution --pipeline-name \"${CODEBUILD_INITIATOR##*/}\" --pipeline-execution-id $(cat /tmp/execution_id.txt) --query 'pipelineExecution.artifactRevisions[0].revisionId' --output=text > /tmp/tag.txt\n      - printf \"%s:%s\" \"$REPOSITORY_URI\" \"$(cat /tmp/tag.txt)\" > /tmp/build_tag.txt\n      - printf '{\"tag\":\"%s\"}' \"$(cat /tmp/tag.txt)\" > /tmp/build.json\n      - $(aws ecr get-login --no-include-email)\n  build:\n    commands:\n      - docker build -t \"$(cat /tmp/build_tag.txt)\" .\n  post_build:\n    commands:\n      - echo \"$(cat /tmp/execution_id.txt)\"\n      - echo \"$(cat /tmp/tag.txt)\"\n      - echo \"$(cat /tmp/build_tag.txt)\"\n      - echo \"$(cat /tmp/build.json)\"\n      - docker push \"$(cat /tmp/build_tag.txt)\"\n      - aws ecr batch-get-image --repository-name $REPOSITORY_NAME --image-ids imageTag=\"$(cat /tmp/tag.txt)\" --query 'images[].imageManifest' --output text | tee /tmp/latest_manifest.json\n      - aws ecr put-image --repository-name $REPOSITORY_NAME --image-tag latest --image-manifest \"$(cat /tmp/latest_manifest.json)\"\nartifacts:\n  files: /tmp/*\n  discard-paths: yes\n",
                     "Type": "CODEPIPELINE"
                 }
             },
@@ -297,6 +357,7 @@
                                                         }
                                                     ]
                                                 },
+                                                "cfn",
                                                 "codebuild"
                                             ]
                                         ]
@@ -310,12 +371,60 @@
                                 "Name": "Container",
                                 "OutputArtifacts": [
                                     {
-                                        "Name": "BuildOutput"
+                                        "Name": "CFNBuildOutput"
                                     }
                                 ]
                             }
                         ],
-                        "Name": "Build"
+                        "Name": "CFNBuild"
+                    },
+                    {
+                        "Actions": [
+                            {
+                                "ActionTypeId": {
+                                    "Category": "Build",
+                                    "Owner": "AWS",
+                                    "Provider": "CodeBuild",
+                                    "Version": "1"
+                                },
+                                "Configuration": {
+                                    "ProjectName": {
+                                        "Fn::Join": [
+                                            "-",
+                                            [
+                                                {
+                                                    "Fn::Select": [
+                                                        0,
+                                                        {
+                                                            "Fn::Split": [
+                                                                "-",
+                                                                {
+                                                                    "Ref": "AWS::StackName"
+                                                                }
+                                                            ]
+                                                        }
+                                                    ]
+                                                },
+                                                "docker",
+                                                "codebuild"
+                                            ]
+                                        ]
+                                    }
+                                },
+                                "InputArtifacts": [
+                                    {
+                                        "Name": "App"
+                                    }
+                                ],
+                                "Name": "Container",
+                                "OutputArtifacts": [
+                                    {
+                                        "Name": "DockerBuildOutput"
+                                    }
+                                ]
+                            }
+                        ],
+                        "Name": "DockerBuild"
                     },
                     {
                         "Actions": [
@@ -330,7 +439,7 @@
                                     "ActionMode": "CREATE_UPDATE",
                                     "Capabilities": "CAPABILITY_NAMED_IAM",
                                     "ChangeSetName": "Deploy",
-                                    "ParameterOverrides": "{\"Tag\" : { \"Fn::GetParam\" : [ \"BuildOutput\", \"build.json\", \"tag\" ] } }",
+                                    "ParameterOverrides": "{\"Tag\" : { \"Fn::GetParam\" : [ \"DockerBuildOutput\", \"build.json\", \"tag\" ] } }",
                                     "RoleArn": {
                                         "Fn::GetAtt": [
                                             "CloudFormationECSRole",
@@ -359,14 +468,17 @@
                                             ]
                                         ]
                                     },
-                                    "TemplatePath": "App::templates/ecs-service-cf.template"
+                                    "TemplatePath": "CFNBuildOutput::ecs-service-cf.template"
                                 },
                                 "InputArtifacts": [
                                     {
                                         "Name": "App"
                                     },
                                     {
-                                        "Name": "BuildOutput"
+                                        "Name": "CFNBuildOutput"
+                                    },
+                                    {
+                                        "Name": "DockerBuildOutput"
                                     }
                                 ],
                                 "Name": "Deploy"
@@ -403,7 +515,7 @@
                                     "ActionMode": "CREATE_UPDATE",
                                     "Capabilities": "CAPABILITY_NAMED_IAM",
                                     "ChangeSetName": "Deploy",
-                                    "ParameterOverrides": "{\"Tag\" : { \"Fn::GetParam\" : [ \"BuildOutput\", \"build.json\", \"tag\" ] } }",
+                                    "ParameterOverrides": "{\"Tag\" : { \"Fn::GetParam\" : [ \"DockerBuildOutput\", \"build.json\", \"tag\" ] } }",
                                     "RoleArn": {
                                         "Fn::GetAtt": [
                                             "CloudFormationECSRole",
@@ -432,14 +544,17 @@
                                             ]
                                         ]
                                     },
-                                    "TemplatePath": "App::templates/ecs-service-cf.template"
+                                    "TemplatePath": "CFNBuildOutput::ecs-service-cf.template"
                                 },
                                 "InputArtifacts": [
                                     {
                                         "Name": "App"
                                     },
                                     {
-                                        "Name": "BuildOutput"
+                                        "Name": "CFNBuildOutput"
+                                    },
+                                    {
+                                        "Name": "DockerBuildOutput"
                                     }
                                 ],
                                 "Name": "Deploy"

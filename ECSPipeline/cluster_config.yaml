@@ -1,0 +1,4 @@
+instanceSize: 't2.micro'
+desiredCapacity: '2'
+minCapacity: '2'
+maxCapacity: '10'

@@ -1,8 +1,6 @@
 """Generating CloudFormation template."""
 
-from ipaddress import ip_network
-
-from ipify import get_ip
+import yaml
 
 from troposphere import (
     Base64,
@@ -14,7 +12,8 @@ from troposphere import (
     Sub,
     Template,
     ec2,
-    FindInMap
+    FindInMap,
+    Split
 )
 
 from troposphere.autoscaling import (
@@ -35,36 +34,56 @@ from troposphere.iam import (
     Role
 )
 
-# Extract our current IP address to use for a later security group
-PublicCidrIp = str(ip_network(get_ip()))
 
 # Instantiate the object
 t = Template()
 
 t.add_description("ECS Cluster Template")
 
+# Get configuration from YAML
+with open('cluster_config.yaml', 'r') as f:
+    doc = yaml.load(f)
+instanceSize = doc['instanceSize']
+desiredCapacity = doc['desiredCapacity']
+minCapacity = doc['minCapacity']
+maxCapacity = doc['maxCapacity']
+
+
+
+
 
 ##############
 # Parameters #
 ##############
 
+
 t.add_parameter(Parameter(
     "VpcId",
-    Type="AWS::EC2::VPC::Id",
+    Type="String",
     Description="VPC"
 ))
 
 t.add_parameter(Parameter(
     "PublicSubnet",
     Description="PublicSubnet",
-    Type="List<AWS::EC2::Subnet::Id>",
-    ConstraintDescription="PublicSubnet"
+    Type="String"
 ))
+
+t.add_parameter(Parameter(
+    "KeyPair",
+    Description="Name of an existing EC2 KeyPair to SSH",
+    Type="AWS::EC2::KeyPair::KeyName",
+    ConstraintDescription="must be the name of an existing EC2 KeyPair.",
+))
+
+
+
 
 
 ############
 # Mappings #
 ############
+
 
 # AMI Maps for EC2 ContainerInstances
 t.add_mapping('RegionMap', {
@@ -74,9 +93,13 @@ t.add_mapping('RegionMap', {
 })
 
 
+
+
+
 #############
 # Resources #
 #############
+
 
 # Security group to access the cluster. Includes PCAR proxy stuff.
 t.add_resource(ec2.SecurityGroup(
@@ -88,12 +111,6 @@ t.add_resource(ec2.SecurityGroup(
             FromPort=0,
             ToPort=65535,
             CidrIp="172.16.0.0/12",
-        ),
-        ec2.SecurityGroupRule(
-            IpProtocol="tcp",
-            FromPort="22",
-            ToPort="22",
-            CidrIp=PublicCidrIp,
         ),
         # Zscaler ranges
         ec2.SecurityGroupRule(
@@ -171,18 +188,19 @@ t.add_resource(LaunchConfiguration(
         Ref('AWS::Region'),
         "\n"])),
     ImageId=FindInMap("RegionMap", Ref("AWS::Region"), "AMI"),
+    KeyName=Ref("KeyPair"),
     SecurityGroups=[Ref("SecurityGroup")],
     IamInstanceProfile=Ref('EC2InstanceProfile'),
-    InstanceType='t2.micro',
+    InstanceType=instanceSize,
     AssociatePublicIpAddress='true',
 ))
 
 t.add_resource(AutoScalingGroup(
     'ECSAutoScalingGroup',
-    DesiredCapacity='1',
-    MinSize='1',
-    MaxSize='5',
-    VPCZoneIdentifier=Ref("PublicSubnet"),
+    DesiredCapacity=desiredCapacity,
+    MinSize=minCapacity,
+    MaxSize=maxCapacity,
+    VPCZoneIdentifier=Split(",", Ref("PublicSubnet")),
     LaunchConfigurationName=Ref('ContainerInstances'),
 ))
 
@@ -253,7 +271,7 @@ t.add_output(Output(
 t.add_output(Output(
     "PublicSubnet",
     Description="PublicSubnet",
-    Value=Join(',', Ref("PublicSubnet")),
+    Value=Ref("PublicSubnet"),
     Export=Export(Sub("${AWS::StackName}-public-subnets")),
 ))
 

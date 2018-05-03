@@ -27,19 +27,34 @@
         }
     },
     "Parameters": {
+        "KeyPair": {
+            "ConstraintDescription": "must be the name of an existing EC2 KeyPair.",
+            "Description": "Name of an existing EC2 KeyPair to SSH",
+            "Type": "AWS::EC2::KeyPair::KeyName"
+        },
+        "ProdPublicSubnet": {
+            "Description": "Prod PublicSubnet",
+            "Type": "List<AWS::EC2::Subnet::Id>"
+        },
+        "ProdVpcId": {
+            "Description": "Prod VPC",
+            "Type": "AWS::EC2::VPC::Id"
+        },
         "RepoName": {
-            "Default": "alb-route53-cf",
-            "Description": "Name of the CodeCommit repository to source",
+            "Description": "CodeCommit Repo containing ECS template",
             "Type": "String"
         },
-        "Route53DomainName": {
-            "Default": "data-muffin.com",
-            "Description": "Domain name registered in Route53",
-            "Type": "String"
+        "StagePublicSubnet": {
+            "Description": "Staging PublicSubnet (format: subnet-2480c343,subnet-7a8a1621)",
+            "Type": "List<AWS::EC2::Subnet::Id>"
+        },
+        "StageVpcId": {
+            "Description": "Staging VPC (format: vpc-263e8d41)",
+            "Type": "AWS::EC2::VPC::Id"
         }
     },
     "Resources": {
-        "CloudFormationNetworkRole": {
+        "CloudFormationClusterRole": {
             "Properties": {
                 "AssumeRolePolicyDocument": {
                     "Statement": [
@@ -87,6 +102,11 @@
                                     "Resource": "*"
                                 },
                                 {
+                                    "Action": "autoscaling:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
+                                },
+                                {
                                     "Action": "elasticloadbalancing:*",
                                     "Effect": "Allow",
                                     "Resource": "*"
@@ -100,10 +120,15 @@
                                     "Action": "codecommit:*",
                                     "Effect": "Allow",
                                     "Resource": "*"
+                                },
+                                {
+                                    "Action": "cloudwatch:*",
+                                    "Effect": "Allow",
+                                    "Resource": "*"
                                 }
                             ]
                         },
-                        "PolicyName": "CloudFormationNetworkPolicy"
+                        "PolicyName": "CloudFormationClusterPolicy"
                     }
                 ],
                 "RoleName": {
@@ -123,57 +148,14 @@
                                     }
                                 ]
                             },
-                            "CloudFormationNetworkRole"
+                            "CloudFormationClusterRole"
                         ]
                     ]
                 }
             },
             "Type": "AWS::IAM::Role"
         },
-        "CodeBuild": {
-            "Properties": {
-                "Artifacts": {
-                    "Name": "output",
-                    "Type": "CODEPIPELINE"
-                },
-                "Environment": {
-                    "ComputeType": "BUILD_GENERAL1_SMALL",
-                    "EnvironmentVariables": [],
-                    "Image": "aws/codebuild/python:3.5.2",
-                    "Type": "LINUX_CONTAINER"
-                },
-                "Name": {
-                    "Fn::Join": [
-                        "-",
-                        [
-                            {
-                                "Fn::Select": [
-                                    0,
-                                    {
-                                        "Fn::Split": [
-                                            "-",
-                                            {
-                                                "Ref": "AWS::StackName"
-                                            }
-                                        ]
-                                    }
-                                ]
-                            },
-                            "codebuild"
-                        ]
-                    ]
-                },
-                "ServiceRole": {
-                    "Ref": "ServiceRole"
-                },
-                "Source": {
-                    "BuildSpec": "version: 0.1\nphases:\n  pre_build:\n    commands:\n      - pip install troposphere\n      - pip install pyyaml\n  build:\n    commands:\n      - echo \"Starting python execution\"\n      - python alb-route53-cf-template.py > /tmp/alb-route53-cf.template\n  post_build:\n    commands:\n      - echo \"Completed CFN template creation.\"\nartifacts:\n  files: /tmp/alb-route53-cf.template\n  discard-paths: yes\n",
-                    "Type": "CODEPIPELINE"
-                }
-            },
-            "Type": "AWS::CodeBuild::Project"
-        },
-        "NetworkPipeline": {
+        "ClusterPipeline": {
             "Properties": {
                 "ArtifactStore": {
                     "Location": {
@@ -273,14 +255,51 @@
                                     "ActionMode": "CREATE_UPDATE",
                                     "Capabilities": "CAPABILITY_NAMED_IAM",
                                     "ChangeSetName": "Deploy",
+                                    "ParameterOverrides": "{\"VpcId\" : { \"Fn::GetParam\" : [ \"BuildOutput\", \"StageVpcId.json\", \"StageVpcId\" ] },\n                        \"PublicSubnet\" : { \"Fn::GetParam\" : [ \"BuildOutput\", \"StagePublicSubnet.json\", \"StagePublicSubnet\" ] },\n                        \"KeyPair\" : { \"Fn::GetParam\" : [ \"BuildOutput\", \"KeyPair.json\", \"KeyPair\" ] } }",
                                     "RoleArn": {
                                         "Fn::GetAtt": [
-                                            "CloudFormationNetworkRole",
+                                            "CloudFormationClusterRole",
                                             "Arn"
                                         ]
                                     },
-                                    "StackName": "alb-route53-resources",
-                                    "TemplatePath": "BuildOutput::alb-route53-cf.template"
+                                    "StackName": "stag-cluster",
+                                    "TemplatePath": "BuildOutput::ecs-cluster-cf.template"
+                                },
+                                "InputArtifacts": [
+                                    {
+                                        "Name": "App"
+                                    },
+                                    {
+                                        "Name": "BuildOutput"
+                                    }
+                                ],
+                                "Name": "Deploy"
+                            }
+                        ],
+                        "Name": "Staging"
+                    },
+                    {
+                        "Actions": [
+                            {
+                                "ActionTypeId": {
+                                    "Category": "Deploy",
+                                    "Owner": "AWS",
+                                    "Provider": "CloudFormation",
+                                    "Version": "1"
+                                },
+                                "Configuration": {
+                                    "ActionMode": "CREATE_UPDATE",
+                                    "Capabilities": "CAPABILITY_NAMED_IAM",
+                                    "ChangeSetName": "Deploy",
+                                    "ParameterOverrides": "{\"VpcId\" : { \"Fn::GetParam\" : [ \"BuildOutput\", \"ProdVpcId.json\", \"ProdVpcId\" ] } ,\n                        \"PublicSubnet\" : { \"Fn::GetParam\" : [ \"BuildOutput\", \"ProdPublicSubnet.json\", \"ProdPublicSubnet\" ] },\n                        \"KeyPair\" : { \"Fn::GetParam\" : [ \"BuildOutput\", \"KeyPair.json\", \"KeyPair\" ] } }",
+                                    "RoleArn": {
+                                        "Fn::GetAtt": [
+                                            "CloudFormationClusterRole",
+                                            "Arn"
+                                        ]
+                                    },
+                                    "StackName": "prod-cluster",
+                                    "TemplatePath": "BuildOutput::ecs-cluster-cf.template"
                                 },
                                 "InputArtifacts": [
                                     {
@@ -298,6 +317,90 @@
                 ]
             },
             "Type": "AWS::CodePipeline::Pipeline"
+        },
+        "CodeBuild": {
+            "Properties": {
+                "Artifacts": {
+                    "Name": "output",
+                    "Type": "CODEPIPELINE"
+                },
+                "Environment": {
+                    "ComputeType": "BUILD_GENERAL1_SMALL",
+                    "EnvironmentVariables": [
+                        {
+                            "Name": "StageVpcId",
+                            "Value": {
+                                "Ref": "StageVpcId"
+                            }
+                        },
+                        {
+                            "Name": "StagePublicSubnet",
+                            "Value": {
+                                "Fn::Join": [
+                                    ",",
+                                    {
+                                        "Ref": "StagePublicSubnet"
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "Name": "ProdVpcId",
+                            "Value": {
+                                "Ref": "ProdVpcId"
+                            }
+                        },
+                        {
+                            "Name": "ProdPublicSubnet",
+                            "Value": {
+                                "Fn::Join": [
+                                    ",",
+                                    {
+                                        "Ref": "StagePublicSubnet"
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "Name": "KeyPair",
+                            "Value": {
+                                "Ref": "KeyPair"
+                            }
+                        }
+                    ],
+                    "Image": "aws/codebuild/python:3.5.2",
+                    "Type": "LINUX_CONTAINER"
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            {
+                                "Fn::Select": [
+                                    0,
+                                    {
+                                        "Fn::Split": [
+                                            "-",
+                                            {
+                                                "Ref": "AWS::StackName"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            "codebuild"
+                        ]
+                    ]
+                },
+                "ServiceRole": {
+                    "Ref": "ServiceRole"
+                },
+                "Source": {
+                    "BuildSpec": "version: 0.1\nphases:\n  pre_build:\n    commands:\n      - pip install troposphere\n      - pip install pyyaml\n  build:\n    commands:\n      - echo \"Starting python execution\"\n      - python ecs-cluster-cf-template.py > /tmp/ecs-cluster-cf.template\n      - printf '{\"StageVpcId\":\"%s\"}' \"$StageVpcId\" > /tmp/StageVpcId.json\n      - printf '{\"StagePublicSubnet\":\"%s\"}' \"$StagePublicSubnet\" > /tmp/StagePublicSubnet.json\n      - printf '{\"ProdVpcId\":\"%s\"}' \"$ProdVpcId\" > /tmp/ProdVpcId.json\n      - printf '{\"ProdPublicSubnet\":\"%s\"}' \"$ProdPublicSubnet\" > /tmp/ProdPublicSubnet.json\n      - printf '{\"KeyPair\":\"%s\"}' \"$KeyPair\" > /tmp/KeyPair.json\n  post_build:\n    commands:\n      - echo \"Completed CFN template creation.\"\n      - echo \"$(cat /tmp/StagePublicSubnet.json)\"\nartifacts:\n  files: /tmp/*\n  discard-paths: yes\n",
+                    "Type": "CODEPIPELINE"
+                }
+            },
+            "Type": "AWS::CodeBuild::Project"
         },
         "PipelineRole": {
             "Properties": {
@@ -363,7 +466,7 @@
                                 }
                             ]
                         },
-                        "PolicyName": "NetworkCodePipeline"
+                        "PolicyName": "ClusterCodePipeline"
                     }
                 ]
             },
