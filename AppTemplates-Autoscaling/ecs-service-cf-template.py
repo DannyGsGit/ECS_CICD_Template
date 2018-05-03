@@ -236,22 +236,42 @@ for utilization in {"CPU"}:
                 Ref("{}{}".format(value['alarmPrefix'], utilization))]
         ))
 
-        t.add_resource(ScalingPolicy(
-            "{}{}".format(value['alarmPrefix'], utilization),
-            PolicyName="{}{}".format(value['alarmPrefix'], utilization),
-            PolicyType='StepScaling',
-            ScalingTargetId=Ref("scalableTarget"),
-            StepScalingPolicyConfiguration=StepScalingPolicyConfiguration(
-                AdjustmentType='ChangeInCapacity',
-                Cooldown=60,
-                MetricAggregationType='Average',
-                StepAdjustments=[
-                    StepAdjustment(
-                        ScalingAdjustment=value['adjustment'],
-                    ),
-                ],
-            ),
-        ))
+        if state == "Low":
+            t.add_resource(ScalingPolicy(
+                "{}{}".format(value['alarmPrefix'], utilization),
+                PolicyName="{}{}".format(value['alarmPrefix'], utilization),
+                PolicyType='StepScaling',
+                ScalingTargetId=Ref("scalableTarget"),
+                StepScalingPolicyConfiguration=StepScalingPolicyConfiguration(
+                    AdjustmentType='ChangeInCapacity',
+                    Cooldown=60,
+                    MetricAggregationType='Average',
+                    StepAdjustments=[
+                        StepAdjustment(
+                            MetricIntervalUpperBound=0,
+                            ScalingAdjustment=value['adjustment'],
+                        ),
+                    ],
+                ),
+            ))
+        if state == "High":
+            t.add_resource(ScalingPolicy(
+                "{}{}".format(value['alarmPrefix'], utilization),
+                PolicyName="{}{}".format(value['alarmPrefix'], utilization),
+                PolicyType='StepScaling',
+                ScalingTargetId=Ref("scalableTarget"),
+                StepScalingPolicyConfiguration=StepScalingPolicyConfiguration(
+                    AdjustmentType='ChangeInCapacity',
+                    Cooldown=60,
+                    MetricAggregationType='Average',
+                    StepAdjustments=[
+                        StepAdjustment(
+                            MetricIntervalLowerBound=0,
+                            ScalingAdjustment=value['adjustment'],
+                        ),
+                    ],
+                ),
+            ))
 
 
 print(t.to_json())
