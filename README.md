@@ -30,11 +30,13 @@ It is recommended to name the stack with format **appname-codepipeline**, and li
 - [x] Clean up ELB/Domain work
 - [x] Lock down security group on Route53/ALB
 - [x] CodePipeline for all infrastructure
-
-- [ ] Scaling rules for containers (https://github.com/cloudtools/troposphere/blob/master/examples/ApplicationAutoScalingSample.py)
+- [x] Scaling rules for containers (https://github.com/cloudtools/troposphere/blob/master/examples/ApplicationAutoScalingSample.py)
+- [x] Cloudwatch logging
+- [x] Test autoscaling
+- [x] Test rolling Update
+- [x] Test instance upgrade
 
 - [ ] Move resources into private subnets of VPC
-- [ ] Cloudwatch logging
 - [ ] Get CloudWatch dashboards coded
 - [ ] Lock down IAM permissions
 - [ ] Template for scheduled tasks

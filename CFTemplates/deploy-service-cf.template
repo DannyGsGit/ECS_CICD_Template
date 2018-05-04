@@ -115,12 +115,7 @@
                                     "Resource": "*"
                                 },
                                 {
-                                    "Action": "cloudwatch:DescribeAlarms",
-                                    "Effect": "Allow",
-                                    "Resource": "*"
-                                },
-                                {
-                                    "Action": "cloudwatch:GetMetricStatistics",
+                                    "Action": "cloudwatch:*",
                                     "Effect": "Allow",
                                     "Resource": "*"
                                 }

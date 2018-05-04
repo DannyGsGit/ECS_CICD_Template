@@ -139,7 +139,7 @@ for e in Environments:
             HealthCheckProtocol="HTTP",
             HealthCheckTimeoutSeconds="15",
             HealthyThresholdCount="5",
-            HealthCheckPath="/{}".format(s),
+            HealthCheckPath="/",
             Matcher=elb.Matcher(
                 HttpCode="200"),
             Port=3000,

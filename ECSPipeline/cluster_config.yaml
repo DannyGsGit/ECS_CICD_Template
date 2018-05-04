@@ -2,3 +2,6 @@ instanceSize: 't2.micro'
 desiredCapacity: '2'
 minCapacity: '2'
 maxCapacity: '10'
+ScalingMetric: 'CPU'   # Can be CPU or Memory
+ScaleUpLevel: '75'
+ScaleDownLevel: '30'

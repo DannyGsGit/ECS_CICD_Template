@@ -76,20 +76,6 @@ t.add_parameter(Parameter(
     Description="Name of the CodeCommit repository to source"
 ))
 
-# t.add_parameter(Parameter(
-#     "TaskCPU",
-#     Type="Number",
-#     Default=256,
-#     Description="Task CPU Allocation (1024 = 1 core)"
-# ))
-#
-# t.add_parameter(Parameter(
-#     "TaskMemory",
-#     Type="Number",
-#     Default=32,
-#     Description="Task Memory Allocation (MiB)"
-# ))
-
 
 #############
 # Resources #
@@ -328,8 +314,7 @@ t.add_resource(Role(
                     {"Effect": "Allow", "Action": "iam:*", "Resource": "*"},
                     {"Effect": "Allow", "Action": "codecommit:*", "Resource": "*"},
                     {"Effect": "Allow", "Action": "application-autoscaling:*", "Resource": "*"},
-                    {"Effect": "Allow", "Action": "cloudwatch:DescribeAlarms", "Resource": "*"},
-                    {"Effect": "Allow", "Action": "cloudwatch:GetMetricStatistics", "Resource": "*"},
+                    {"Effect": "Allow", "Action": "cloudwatch:*", "Resource": "*"},
                 ],
             }
         ),

@@ -47,7 +47,9 @@ instanceSize = doc['instanceSize']
 desiredCapacity = doc['desiredCapacity']
 minCapacity = doc['minCapacity']
 maxCapacity = doc['maxCapacity']
-
+ScalingMetric = doc['ScalingMetric']
+ScaleUpLevel = doc['ScaleUpLevel']
+ScaleDownLevel = doc['ScaleDownLevel']
 
 
 
@@ -206,20 +208,20 @@ t.add_resource(AutoScalingGroup(
 
 states = {
     "High": {
-        "threshold": "75",
+        "threshold": ScaleUpLevel,
         "alarmPrefix": "ScaleUpPolicyFor",
         "operator": "GreaterThanThreshold",
         "adjustment": "1"
     },
     "Low": {
-        "threshold": "30",
+        "threshold": ScaleDownLevel,
         "alarmPrefix": "ScaleDownPolicyFor",
         "operator": "LessThanThreshold",
         "adjustment": "-1"
     }
 }
 
-for reservation in {"CPU", "Memory"}:
+for reservation in {ScalingMetric}:
     for state, value in states.items():
         t.add_resource(Alarm(
             "{}ReservationToo{}".format(reservation, state),

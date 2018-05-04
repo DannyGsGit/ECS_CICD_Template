@@ -58,7 +58,9 @@ TaskMemory = doc['TaskMemory']
 DesiredTaskCapacity = doc['DesiredTaskCapacity']
 MinTaskCapacity = doc['MinTaskCapacity']
 MaxTaskCapacity = doc['MaxTaskCapacity']
-
+ScalingMetric = doc['ScalingMetric']
+ScaleUpLevel = doc['ScaleUpLevel']
+ScaleDownLevel = doc['ScaleDownLevel']
 
 t = Template()
 
@@ -193,20 +195,20 @@ t.add_resource(ScalableTarget(
 # Set scaling policies
 states = {
     "High": {
-        "threshold": "75",
+        "threshold": ScaleUpLevel,
         "alarmPrefix": "ScaleUpPolicyFor",
         "operator": "GreaterThanOrEqualToThreshold",
         "adjustment": "1"
     },
     "Low": {
-        "threshold": "40",
+        "threshold": ScaleDownLevel,
         "alarmPrefix": "ScaleDownPolicyFor",
         "operator": "LessThanOrEqualToThreshold",
         "adjustment": "-1"
     }
 }
 
-for utilization in {"CPU"}:
+for utilization in {ScalingMetric}:
     for state, value in states.items():
         t.add_resource(Alarm(
             "{}UtilizationToo{}".format(utilization, state),
@@ -218,7 +220,7 @@ for utilization in {"CPU"}:
             Dimensions=[
                 MetricDimension(
                     Name="ServiceName",
-                    Value=Ref("service")
+                    Value=GetAtt(ecsservice, "Name")
                 ),
                 MetricDimension(
                     Name="ClusterName",
